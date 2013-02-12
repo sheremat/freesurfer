@@ -17,9 +17,9 @@
 /*
  * Original Authors: Rudolph Pienaar / Christian Haselgrove
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.15 $
+ *    $Author: rudolph $
+ *    $Date: 2013/01/25 16:39:24 $
+ *    $Revision: 1.18 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -74,7 +74,7 @@ bool    Gb_stdout       = true;         // Global flag controlling output to
                                         //+stdout
 string  G_SELF          = "";           // "My" name
 string  G_VERSION       =               // version
-  "$Id: mris_pmake.cpp,v 1.15 2011/02/27 21:18:07 nicks Exp $";
+  "$Id: mris_pmake.cpp,v 1.18 2013/01/25 16:39:24 rudolph Exp $";
 char 	pch_buffer[65536];
 
 // "Class"-like globals...
@@ -86,12 +86,13 @@ int
 main(
     int         argc,
     char**      ppch_argv) {
-
+ 
   /* ----- initializations ----- */
   Gpch_Progname  = strrchr(ppch_argv[0], '/');
   Gpch_Progname  = (Gpch_Progname == NULL ? ppch_argv[0] : Gpch_Progname+1);
   string	str_progname(Gpch_Progname);
   G_SELF        = str_progname;
+  int 		ret = 0;
 
   // "Construct" a default environment structure.
   s_env_nullify(st_env);
@@ -101,12 +102,12 @@ main(
   st_env.str_workingDir         = "./";
   st_env.str_optionsFileName    = "options.txt";
   st_env.b_surfacesKeepInSync   = true;         // This allows us to
-                                                //+ propogate changes
+                                                //+ propagate changes
                                                 //+ in the working
                                                 //+ surface to the
-                                                //+ auxillary surface.
+                                                //+ auxiliary surface.
 
-  // Set the default cost function in the enviroment
+  // Set the default cost function in the environment
   // -- Cost function is set when mpmOverlay initialized
   //s_env_costFctSet(&st_env, costFunc_defaultDetermine, e_default);
 
@@ -119,7 +120,7 @@ main(
     if ( str_asynchComms == "HUP"               || \
          str_asynchComms == "RUNPROG") {
 
-      system("echo > lock");            // signal a "lock"
+      ret = system("echo > lock");	// signal a "lock"
                                         //+ semaphore on
                                         //+ the file system
 
@@ -169,7 +170,8 @@ main(
   if (st_env.pcsm_userlog) {
     st_env.pcsm_userlog->timer(eSM_stop);
   }
-  system("rm -f lock 2>/dev/null");  // "unlock" semaphore
+  ret = system("rm -f lock 2>/dev/null");  // "unlock" semaphore
+  if(ret) printf("WARNING: 'rm' returned non-zero exit status!\n");
   return EXIT_SUCCESS;
 
 } /* end main() */

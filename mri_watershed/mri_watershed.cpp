@@ -12,8 +12,8 @@
  * Original Authors: Florent Segonne & Bruce Fischl
  * CVS Revision Info:
  *    $Author: nicks $
- *    $Date: 2011/11/08 22:18:44 $
- *    $Revision: 1.96.2.1 $
+ *    $Date: 2011/11/08 22:17:40 $
+ *    $Revision: 1.97 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -27,7 +27,7 @@
  *
  */
 
-const char *MRI_WATERSHED_VERSION = "$Revision: 1.96.2.1 $";
+const char *MRI_WATERSHED_VERSION = "$Revision: 1.97 $";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -838,8 +838,8 @@ int main(int argc, char *argv[])
 
   make_cmd_version_string
   (argc, argv,
-   "$Id: mri_watershed.cpp,v 1.96.2.1 2011/11/08 22:18:44 nicks Exp $",
-   "$Name: stable5 $",
+   "$Id: mri_watershed.cpp,v 1.97 2011/11/08 22:17:40 nicks Exp $",
+   "$Name:  $",
    cmdline);
 
   Progname=argv[0];
@@ -851,8 +851,8 @@ int main(int argc, char *argv[])
   /* rkt: check for and handle version tag */
   nargs = handle_version_option
           (argc, argv,
-           "$Id: mri_watershed.cpp,v 1.96.2.1 2011/11/08 22:18:44 nicks Exp $",
-           "$Name: stable5 $");
+           "$Id: mri_watershed.cpp,v 1.97 2011/11/08 22:17:40 nicks Exp $",
+           "$Name:  $");
   if (nargs && argc - nargs == 1)
   {
     exit (0);

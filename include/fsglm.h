@@ -8,8 +8,8 @@
  * Original Author: REPLACE_WITH_FULL_NAME_OF_CREATING_AUTHOR 
  * CVS Revision Info:
  *    $Author: greve $
- *    $Date: 2011/05/05 15:29:50 $
- *    $Revision: 1.14.2.1 $
+ *    $Date: 2011/05/05 15:28:03 $
+ *    $Revision: 1.15 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -25,7 +25,7 @@
 
 
 // fsglm.h - include file for fsglm.c
-// $Id: fsglm.h,v 1.14.2.1 2011/05/05 15:29:50 greve Exp $
+// $Id: fsglm.h,v 1.15 2011/05/05 15:28:03 greve Exp $
 
 #ifndef FSGLM_H
 #define FSGLM_H

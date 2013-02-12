@@ -8,8 +8,8 @@
  * Original Author: Bruce Fischl
  * CVS Revision Info:
  *    $Author: nicks $
- *    $Date: 2011/04/27 13:51:40 $
- *    $Revision: 1.30.2.1 $
+ *    $Date: 2011/04/27 13:50:13 $
+ *    $Revision: 1.33 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -44,7 +44,7 @@
 #include "label.h"
 #include "version.h"
 
-static char vcid[] = "$Id: mris_spherical_average.c,v 1.30.2.1 2011/04/27 13:51:40 nicks Exp $";
+static char vcid[] = "$Id: mris_spherical_average.c,v 1.33 2011/04/27 13:50:13 nicks Exp $";
 
 int main(int argc, char *argv[]) ;
 
@@ -92,10 +92,10 @@ main(int argc, char *argv[])
 
   char cmdline[CMD_LINE_LEN] ;
 
-  make_cmd_version_string (argc, argv, "$Id: mris_spherical_average.c,v 1.30.2.1 2011/04/27 13:51:40 nicks Exp $", "$Name: stable5 $", cmdline);
+  make_cmd_version_string (argc, argv, "$Id: mris_spherical_average.c,v 1.33 2011/04/27 13:50:13 nicks Exp $", "$Name:  $", cmdline);
 
   /* rkt: check for and handle version tag */
-  nargs = handle_version_option (argc, argv, "$Id: mris_spherical_average.c,v 1.30.2.1 2011/04/27 13:51:40 nicks Exp $", "$Name: stable5 $");
+  nargs = handle_version_option (argc, argv, "$Id: mris_spherical_average.c,v 1.33 2011/04/27 13:50:13 nicks Exp $", "$Name:  $");
   if (nargs && argc - nargs == 1)
   {
     exit (0);

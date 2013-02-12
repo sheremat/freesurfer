@@ -10,7 +10,7 @@
 /*
  * Original Author: Krish Subramaniam
  * CVS Revision Info:
- * $Id: cudadetect.cpp,v 1.8.2.1 2011/03/26 19:43:47 nicks Exp $
+ * $Id: cudadetect.cpp,v 1.9 2011/03/26 19:43:19 nicks Exp $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *

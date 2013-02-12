@@ -1,14 +1,14 @@
 /**
  * @file  RenderView3D.h
- * @brief REPLACE_WITH_ONE_LINE_SHORT_DESCRIPTION
+ * @brief 3D view
  *
  */
 /*
  * Original Author: Ruopeng Wang
  * CVS Revision Info:
  *    $Author: rpwang $
- *    $Date: 2011/05/13 15:04:33 $
- *    $Revision: 1.33.2.3 $
+ *    $Date: 2012/10/23 17:35:44 $
+ *    $Revision: 1.37 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -38,6 +38,7 @@ class Interactor3DMeasure;
 class Interactor3DVolumeCrop;
 class vtkAnnotatedCubeActor;
 class Layer;
+class SurfaceROI;
 
 class RenderView3D : public RenderView
 {
@@ -46,8 +47,6 @@ public:
   RenderView3D( QWidget* parent );
 
   void SetInteractionMode(int nMode);
-
-  int PickCell( vtkProp* prop, int posX, int posY, double* pos_out = NULL );
 
   void UpdateViewByWorldCoordinate();
 
@@ -98,6 +97,10 @@ public:
   {
     return m_bShowSlices;
   }
+
+  SurfaceROI* InitializeSurfaceROI( int posX, int posY );
+
+  void AddSurfaceROIPoint( int posX, int posY );
 
 signals:
   void SurfaceVertexClicked();

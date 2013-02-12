@@ -8,9 +8,9 @@
 /*
  * Original Author:  Rudolph Pienaar / Christian Haselgrove
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.15 $
+ *    $Author: rudolph $
+ *    $Date: 2012/07/05 21:21:28 $
+ *    $Revision: 1.19 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -27,6 +27,8 @@
 #include <string>
 #include <sstream>
 
+#include "legacy.h"
+
 #include "asynch.h"
 #include "general.h"
 #include "c_vertex.h"
@@ -36,6 +38,7 @@
 extern  bool    	Gb_stdout;
 extern  stringstream 	Gsout;
 
+#if 0
 bool
 asynchEvent_processWGHT(
   s_env&    ast_env,
@@ -289,6 +292,7 @@ asynchEvent_processDWGHT(
   cout.flags(origFlags);
   return true;
 }
+#endif
 
 bool
 asynchEvent_processVERTEX(
@@ -447,7 +451,7 @@ asynchEvent_processENV(
         return false;
       Gsout.str("");
       Gsout << "Setting surfaceSulcal to \t\t\t\t\t[ " << str_modifier << " ]" << endl;
-      if (!s_env_surfaceSulcal_set(st_env, str_modifier))
+      if (!s_env_secondarySurface_setCurvature(st_env, str_modifier))
         error_exit("Setting surfaceSulcal", "Some error occurred", 1);
       ULOUT(Gsout.str());
     }
@@ -609,6 +613,30 @@ pC_pathFind_cast(
     return pC_mpmProg_pathFind;
 }
 
+C_mpmProg_ROI*
+pC_ROI_cast(
+    C_mpmProg*                  pmpm,
+    C_mpmProg_ROI*&             pC_mpmProg_ROI
+) {
+    pC_mpmProg_ROI              = dynamic_cast<C_mpmProg_ROI*>(pmpm);
+    if(!pC_mpmProg_ROI) {
+        cout << "The embedded mpmProg is not of type 'ROI'" << endl;
+    }
+    return pC_mpmProg_ROI;
+}
+
+C_mpmProg_externalMesh*
+pC_externalMesh_cast(
+    C_mpmProg*                  pmpm,
+    C_mpmProg_externalMesh*&    pC_mpmProg_externalMesh
+) {
+    pC_mpmProg_externalMesh     = dynamic_cast<C_mpmProg_externalMesh*>(pmpm);
+    if(!pC_mpmProg_externalMesh) {
+        cout << "The embedded mpmProg is not of type 'externalMesh'" << endl;
+    }
+    return pC_mpmProg_externalMesh;
+}
+
 bool
 asynchEvent_processMPMPROG(
     s_env&      st_env,
@@ -634,8 +662,14 @@ asynchEvent_processMPMPROG(
     C_mpmProg_NOP*              pC_NOP          = NULL;
     C_mpmProg_pathFind*		pC_pathFind 	= NULL;
     C_mpmProg_autodijk*         pC_autodijk     = NULL;
+    C_mpmProg_ROI*              pC_ROI          = NULL;
+    C_mpmProg_externalMesh*	pC_externalMesh = NULL;
     switch(st_env.empmProg_current) {
-	case emp_NULL: break;
+    	case emp_externalMesh:
+                if( (pC_externalMesh_cast(st_env.pCmpmProg, pC_externalMesh))==NULL)
+                    return false;
+        break;
+    	case emp_NULL: break;
         case emp_NOP:
             if( (pC_NOP_cast(st_env.pCmpmProg, pC_NOP))==NULL) 
 		return false;
@@ -673,6 +707,17 @@ asynchEvent_processMPMPROG(
                         pC_autodijk->surfaceRipClear_get());
             }
 	 break;
+        case emp_ROI:
+            if( (pC_ROI_cast(st_env.pCmpmProg, pC_ROI))==NULL)
+                return false;
+            if (str_verb == "get" || str_verb == "list") {
+                colprintf(lw, rw, "Radius", "[ %f ]\n",
+                        pC_ROI->radius_get());
+                colprintf(lw, rw, "Number of ROI vertex seeds:",
+                        "[ %d ]\n",
+                        pC_ROI->v_vertex_get().size());
+            }
+        break;
 	case empmprog: break;
       }
     }
@@ -803,10 +848,10 @@ asynchEvent_processLABEL(
       return false;
     int vertex  = atoi(str_modifier.c_str());
     if (str_object          == "workingSurface") {
-      label_singleVertexSet(st_env.pMS_curvature, vertex,
+      label_singleVertexSet(st_env.pMS_primary, vertex,
                             vertex_ripFlagMark, pv_mark);
-    } else if (str_object   == "auxSurface") {
-      label_singleVertexSet(st_env.pMS_auxSurface, vertex,
+    } else if (str_object   == "secondarySurface") {
+      label_singleVertexSet(st_env.pMS_secondary, vertex,
                             vertex_ripFlagMark, pv_mark);
     } else if (str_object   == "activeSurface") {
       label_singleVertexSet(st_env.pMS_active, vertex,
@@ -825,10 +870,10 @@ asynchEvent_processLABEL(
     if (relDirSpec_test(str_modifier))
       str_fileSpec = st_env.str_workingDir + str_modifier;
     if (str_object          == "workingSurface") {
-      label_coreLoad(st_env.pMS_curvature, str_fileSpec,
+      label_coreLoad(st_env.pMS_primary, str_fileSpec,
                      vertex_ripFlagMark, pv_mark);
-    } else if (str_object   == "auxSurface") {
-      label_coreLoad(st_env.pMS_auxSurface, str_fileSpec,
+    } else if (str_object   == "secondarySurface") {
+      label_coreLoad(st_env.pMS_secondary, str_fileSpec,
                      vertex_ripFlagMark, pv_mark);
     } else if (str_object   == "activeSurface") {
       label_coreLoad(st_env.pMS_active, str_fileSpec,
@@ -844,10 +889,10 @@ asynchEvent_processLABEL(
     if (relDirSpec_test(str_modifier))
       str_fileSpec = st_env.str_workingDir + str_modifier;
     if (str_object          == "workingSurface") {
-      label_coreSave(st_env.pMS_curvature, str_fileSpec,
+      label_coreSave(st_env.pMS_primary, str_fileSpec,
                      vertex_ripFlagIsTrue, pv_void);
-    } else if (str_object   == "auxSurface") {
-      label_coreSave(st_env.pMS_auxSurface, str_fileSpec,
+    } else if (str_object   == "secondarySurface") {
+      label_coreSave(st_env.pMS_secondary, str_fileSpec,
                      vertex_ripFlagIsTrue, pv_void);
     } else if (str_object   == "activeSurface") {
       label_coreSave(st_env.pMS_active, str_fileSpec,
@@ -864,7 +909,7 @@ asynchEvent_processLABEL(
       string  str_fileName   = str_modifier;
       bool b_terminalsFound = false;
       deque<int> que_terminal;
-      b_terminalsFound = label_terminalsFind(st_env.pMS_curvature,
+      b_terminalsFound = label_terminalsFind(st_env.pMS_primary,
                                              str_fileName, que_terminal);
       if (!b_terminalsFound) {
         nULOUT("\t\t\t\t\t[ none found ]\n");
@@ -886,14 +931,14 @@ asynchEvent_processLABEL(
   if (str_object == "ply") {
     if (str_verb == "get") {
       CW(lw, "ply depth");
-      CWn(rw, st_env.plyDepth);
+      CWn(rw, s_env_plyDepth_get(st_env));
     } else if (str_verb == "set") {
       if (!str_modifier.length())
         return false;
       Gsout.str("");
       val = atoi(str_modifier.c_str());
       Gsout << "Setting ply depth to \t\t\t\t\t\t[ " << val << " ]" << endl;
-      st_env.plyDepth =  val;
+      s_env_plyDepth_set(st_env, val);
       ULOUT(Gsout.str());
     } else if (str_verb == "do") {
       ULOUT("Performing ply search");

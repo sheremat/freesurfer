@@ -8,8 +8,8 @@
 # Original Author: Nick Schmansky
 # CVS Revision Info:
 #    $Author: nicks $
-#    $Date: 2011/05/02 21:09:55 $
-#    $Revision: 1.6.4.1 $
+#    $Date: 2011/05/02 21:02:42 $
+#    $Revision: 1.7 $
 #
 # Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
 #
@@ -21,10 +21,8 @@
 #
 # Reporting: freesurfer@nmr.mgh.harvard.edu
 #
-# General inquiries: freesurfer@nmr.mgh.harvard.edu
-#
 
-set VERSION='$Id: test_mri_ca_normalize,v 1.6.4.1 2011/05/02 21:09:55 nicks Exp $'
+set VERSION='$Id: test_mri_ca_normalize,v 1.7 2011/05/02 21:02:42 nicks Exp $'
 
 umask 002
 

@@ -12,9 +12,9 @@
 /*
  * Original Author: Rudolph Pienaar
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.10 $
+ *    $Author: rudolph $
+ *    $Date: 2012/11/20 18:17:44 $
+ *    $Revision: 1.19 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -36,10 +36,6 @@
 extern  "C" {
 #endif
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
 #include "mri.h"
 #include "mrisurf.h"
 #include "label.h"
@@ -51,6 +47,8 @@ extern  "C" {
 #endif
 
 #include "env.h"
+#include "C_mpmOverlay.h"
+#include "general.h"
 
 #include "oclDijkstraKernel.h"
 
@@ -58,6 +56,7 @@ extern  "C" {
 using namespace std;
 
 const int       MPMSTACKDEPTH     = 64;
+
 
 class C_mpmProg {
 
@@ -264,13 +263,40 @@ class C_mpmProg_autodijk : public C_mpmProg {
 
   protected:
 
-    int         mvertex_polar;
-    int         mvertex_start;
-    int         mvertex_step;
-    int         mvertex_end;
+    C_mpmOverlay*       mpOverlayDistance;      // A pointer to a 'distance'
+                                                //+ mpmOverlay used to determine
+                                                //+ anti-polar point.
+    C_mpmOverlay*       mpOverlayOrig;          // A pointer to the "original"
+                                                //+ overlay created in the
+                                                //+ base environment.
+
+    int         mvertex_polar;                  // For single sweep runs, this
+                                                //+ defines the "polar" vertex
+                                                //+ to start from
+    int         mvertex_start;                  // For multiple sweep runs, like
+                                                //+ worldMaps, this defines the
+                                                //+ start vertex
+    int         mvertex_step;                   // the "step" vertex
+    int         mvertex_end;                    // and the end vertex index
+                                                // Taken together, these
+                                                //+ allow for selective sweeps
+                                                //+ across the surface, and
+                                                //+ also for re-starting
+                                                //+ crashed processes.
     int         mvertex_total;
     int         m_costFunctionIndex;
+    e_stats     ms_stats;                       // A simple stats objects
     bool        mb_surfaceRipClear;
+    bool        mb_worldMap;                    // If true, generate a 'world
+                                                //+ map' by looping exhaustively
+                                                //+ over the entire surface and
+                                                //+ only recording the cost 
+                                                //+ value at the vertex index
+                                                //+ "farthest" from each start
+                                                //+ vertex.
+    bool        mb_worldMapDistanceCalc;        // State calculation tracker
+                                                //+ used for descriptive
+                                                //+ output management
     bool        mb_performExhaustive;           // If true, perform cost
                                                 //+ calculations from polar
                                                 //+ to every other vertex in
@@ -283,8 +309,25 @@ class C_mpmProg_autodijk : public C_mpmProg {
     int         mprogressIter;                  // Number of iterations to
                                                 //+ loop before showing
                                                 //+ progress to stdout
-    float*      mpf_cost;                       // Cost as calculated by
-                                                //+ autodijk
+    float*      mpf_cost;                       // Cost array as calculated by
+                                                //+ by single call of autodijk.
+                                                //+ In cases where multiple 
+                                                //+ calls are performed as part
+                                                //+ of larger analysis, costs
+                                                //+ might change. To keep
+                                                //+ costs persistent, use the
+                                                //+ mpf_persistent array.
+    float*      mpf_persistent;                 // An array used to store values
+                                                //+ that need to be persistent
+                                                //+ across a whole autodijk run.
+    float*      mpf_fileSaveData;               // The save routine saves data
+                                                //+ pointed to by this routine.
+                                                //+ Typically pointer is managed
+                                                //+ internally and should not
+                                                //+ be manipulated outside this
+                                                //+ class.
+    bool        mb_simpleStatsShow;             // If true, output some very
+                                                //+ simple stats
     string      mstr_costFileName;              // Parsed from the environment
                                                 //+ structure
     string      mstr_costFullPath;              // Full path to cost file                                            
@@ -335,6 +378,10 @@ class C_mpmProg_autodijk : public C_mpmProg {
     int         vertexEnd_get() {
             return(mvertex_end);
     };
+
+    void        worldMap_set(int avalue);
+    bool        worldMap_shouldCreate();
+
     void        progressIter_set(int avalue) {
             mprogressIter       = avalue;
     };
@@ -343,6 +390,7 @@ class C_mpmProg_autodijk : public C_mpmProg {
     };
     void        print(void);
 
+    int         vertexCosts_pack(e_stats& a_stats);
     //
     // Functional block
     //
@@ -388,6 +436,138 @@ class C_mpmProg_autodijk_fast : public C_mpmProg_autodijk
     virtual int         run(void);
 };
 
+
+///
+/// \class C_mpmProg_ROI
+/// \brief This class paints an ROI about a vertex.
+///
+class C_mpmProg_ROI : public C_mpmProg {
+
+  protected:
+
+    float               mf_radius;
+    float               mf_plyIncrement;
+    bool                mb_surfaceRipClear;
+    vector<int>         mv_vertex;
+    string              mstr_vertexFile;
+    string              mstr_labelFile;
+    string              mstr_outputStem;
+    bool                mb_ROIsInSeparateLabels;
+    bool                mb_saveStaggered;
+    bool		mb_boundaryOnly;	  // Toggle ROI only at border
+    int			m_borderSize;
+
+  public:
+    C_mpmProg_ROI(
+        s_env* 		aps_env, 
+        string          astr_vertexFile = "",
+        float 		af_radius       = 10);
+    ~C_mpmProg_ROI(void);
+
+    //
+    // Access block
+    //
+    int		borderSize(void) const {
+	    return m_borderSize;
+    };
+
+    bool	boundaryOnly(void) const {
+	    return mb_boundaryOnly;
+    };
+
+    bool	boundaryOnly(const bool& ab_val) {
+	    mb_boundaryOnly	= ab_val;
+	    return mb_boundaryOnly;
+    };
+
+    void        surfaceRipClear_set(bool avalue) {
+            mb_surfaceRipClear  = avalue;
+    };
+    int         surfaceRipClear_get() {
+            return(mb_surfaceRipClear);
+    };
+
+    void        plySaveStaggered_set(bool avalue) {
+            mb_saveStaggered  = avalue;
+    };
+    int         plySaveStaggered_get() {
+            return(mb_saveStaggered);
+    };
+
+
+    void        radius_set(float af_value) {
+            mf_radius   = af_value;
+    };
+    float       radius_get() {
+            return mf_radius;
+    };
+
+    void        plyIncrement_set(float af_value) {
+            mf_plyIncrement   = af_value;
+    };
+    float       plyIncrement_get() {
+            return mf_plyIncrement;
+    };
+
+    vector<int> v_vertex_get() {
+            return mv_vertex;
+    };
+
+    int		border_mark(void);
+    int         vertexFile_load(        string  astr_fileName);
+    int         labelFile_load(         string  astr_fileName);
+    int         labelFile_save(         string  astr_fileName);
+    int         label_savePly(          string  astr_filePrefix,
+                                        bool    ab_staggered    = false,
+                                        float   af_plyIncrement = 1.0);
+
+    void        print(void);
+
+    //
+    // Functional block
+    //
+
+    virtual int         run(void);
+    float               cost_compute(int start, int end);
+};
+
+///
+/// \class C_mpmProg_externalMesh
+/// \brief This class uses an externalMesh with same vertices but different edges
+///
+class C_mpmProg_externalMesh : public C_mpmProg {
+
+  protected:
+
+    bool                mb_surfaceRipClear;
+    vector<int>         mv_vertex;
+    string              mstr_meshFile;
+
+  public:
+    C_mpmProg_externalMesh(
+        s_env* 		aps_env,
+        string      astr_meshFile = "");
+    ~C_mpmProg_externalMesh(void);
+
+    //
+    // Access block
+    //
+    void        surfaceRipClear_set(bool avalue) {
+            mb_surfaceRipClear  = avalue;
+    };
+    int         surfaceRipClear_get() {
+            return(mb_surfaceRipClear);
+    };
+
+    void        print(void);
+
+    //
+    // Functional block
+    //
+
+    virtual int         run(void);
+    float               cost_compute(int start, int end);
+};
 
 #endif //__C_MPM_PROG_H__
 

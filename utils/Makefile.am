@@ -79,6 +79,7 @@ libutils_main_SOURCES=\
 	cma.c \
 	cmdargs.c \
 	colortab.c \
+	connectcomp.c \
 	corio.c \
 	cpputils.cpp \
 	ctrpoints.c \
@@ -103,6 +104,7 @@ libutils_main_SOURCES=\
 	fsenv.c \
 	fsglm.c \
 	fsPrintHelp.c \
+	fsinit.c \
 	gcaboundary.c \
 	gca.c \
 	gcamorph.c \
@@ -149,6 +151,7 @@ libutils_main_SOURCES=\
 	mosaic.c \
 	mri2.c \
 	mri.c \
+  mriBSpline.c \
 	mriclass.c \
 	mri_conform.c \
 	mricurv.c \
@@ -185,6 +188,7 @@ libutils_main_SOURCES=\
 	pdf.c \
 	pgmstubs.c \
 	prime.c \
+	Progname.c \
 	queue.c \
 	randomfields.c \
 	rbf.c \
@@ -194,6 +198,8 @@ libutils_main_SOURCES=\
 	resample.c \
 	rescale.c \
 	retinotopy.c \
+	rfa.c \
+	rforest.c \
 	selxavgio.c \
 	sig.c \
 	signa.c \
@@ -208,7 +214,6 @@ libutils_main_SOURCES=\
 	transform.c \
 	tritri.c \
 	tukey.c \
-	unwarpGradientNonlinearity.c \
 	utils.c \
 	version.c \
 	vlabels.c \
@@ -310,7 +315,7 @@ libutils_a_SOURCES=\
 # BUILDCUDA is defined if configure.in finds CUDA
 if BUILDCUDA
 # rules for building cuda files
-NVCCINCLUDES = -I$(top_srcdir)/include $(MNI_CFLAGS)
+NVCCINCLUDES = $(CUDA_CFLAGS) -I$(top_srcdir)/include $(MNI_CFLAGS)
 
 if HAVE_FERMI_GPU
 # Fermi flags:

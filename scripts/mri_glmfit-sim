@@ -1,5 +1,5 @@
 #!/bin/tcsh -f
-set VERSION = '$Id: mri_glmfit-sim,v 1.36.2.3 2011/05/25 20:23:08 greve Exp $';
+set VERSION = '$Id: mri_glmfit-sim,v 1.46 2012/10/01 22:31:27 greve Exp $';
 
 set inputargs = ($argv);
 
@@ -28,6 +28,7 @@ set volsubject = fsaverage;
 set subjectOverride = ();
 set Bonferroni = 0;
 set ReportCentroid = 0;
+set annot = aparc
 
 set nJobs = 1;
 set DoBackground = 0;
@@ -71,12 +72,6 @@ if(! -e $glmfitlog) then
   exit 1;
 endif
 
-set mask = `stem2fname $glmdir/mask`
-if($status) then
-  echo "$mask"
-  exit 1;
-endif
-
 if($nulltype != perm) then
   set fwhmfile = $glmdir/fwhm.dat
   if(! -e $fwhmfile) then
@@ -90,10 +85,11 @@ else
 endif
 
 set glmfitcwd = `cat $glmfitlog | awk '{if($1 == "cwd") print $2}'`
-if(! -e $glmfitcwd) then
+if(0 && ! -e $glmfitcwd) then
   echo "ERROR: cannot find $glmfitcwd"
   exit 1;
 endif
+set glmfitcwd = `pwd`;
 
 set anattype = volume;
 set subject = ();
@@ -109,6 +105,7 @@ set glmfitcmd0 = `cat $glmfitlog | awk '{if($1 == "cmdline") print $0}'`
 set glmfitcmd = ($glmfitcmd0);
 echo $glmfitcmd
 set gd2mtx = dods
+set UseTable = 0;
 set label = ();
 while($#glmfitcmd)
   set flag = $glmfitcmd[1]; shift glmfitcmd;
@@ -130,6 +127,7 @@ while($#glmfitcmd)
     shift glmfitcmd;
     if($#glmfitcmd > 0) then
       if($glmfitcmd[1] == doss) set gd2mtx = doss
+    endif
     breaksw
   case "--label"
     set label = $glmfitcmd[1]; shift glmfitcmd;
@@ -138,15 +136,20 @@ while($#glmfitcmd)
     # Probably never gets here
     set PermForce = 1;
     breaksw
+  case "--table"
   case "--y"
-    set y = $glmfitcwd/$glmfitcmd[1]; shift glmfitcmd;
+    set y = $glmfitcmd[1]; shift glmfitcmd;
     if(! -e $y) then
-      set y = $glmdir/`basename $y`
+      set y = $glmfitcwd/$y
       if(! -e $y) then
-        echo "ERROR: cannot find $y"
-        exit 1;
+        set y = $glmdir/`basename $y`
+        if(! -e $y) then
+          echo "ERROR: cannot find $y"
+          exit 1;
+        endif
       endif
     endif
+    if("$flag" == "--table") set UseTable = 1;
     breaksw
   case "--wls"
     set wls = $glmfitcwd/$glmfitcmd[1]; shift glmfitcmd;
@@ -191,6 +194,7 @@ while($#glmfitcmd)
   case "--yffxvar"
   case "--ffxdof"
   case "--ffxdofdat"
+  case "--exclude-frame"
     shift glmfitcmd;
     breaksw
   default
@@ -202,6 +206,16 @@ while($#glmfitcmd)
     breaksw 
   endsw
 end
+
+set mask = ();
+if(! $UseTable) then
+  set mask = `stem2fname $glmdir/mask`
+  if($status) then
+    echo "$mask"
+    exit 1;
+  endif
+endif
+
 
 if($UseGRF && $anattype != volume) then
   echo "ERROR: can only use --grf with volume"
@@ -226,6 +240,11 @@ if($#subject != 0) then
 endif
 
 # Get a list of contrasts, etc
+set FSGDhasCon = 0;
+if(-e $glmdir/y.fsgd) then
+  # check whether contrasts were specified in the FSGD
+  set FSGDhasCon = `cat $glmdir/y.fsgd | awk '{if($1 == "Contrast") print 1}' | wc -l`
+endif
 if($#tmpdir == 0) set tmpdir = $glmdir/tmp.mri_glmfit-sim-$$
 mkdir -p $tmpdir
 set clist = ($glmdir/*/C.dat)
@@ -241,7 +260,8 @@ foreach c ($clist)
   set conlist = ($conlist $conname);
   set confile = $tmpdir/$conname.mtx
   cp $c $confile
-  set clist2 = ($clist2 --C $confile);
+  # If Cons in the FSGD, dont spec on glmfit cmd line
+  if($FSGDhasCon == 0)  set clist2 = ($clist2 --C $confile);
 
   # Make sure sig is there
   set sig = `stem2fname $glmdir/$conname/sig`
@@ -352,19 +372,22 @@ if($DoSim) then
     set jpad = `printf j%03d $nthJob`
     echo "$nthJob/$nJobs `date`" | tee -a $LF
 
-    set cmd = (mri_glmfit --y $y $clist2 --mask $mask)
+    set cmd = (mri_glmfit $clist2)
     set cmd = ($cmd --sim $nulltype $nSimPerJob $thresh \
        $glmdir/csd/$csdbase.$jpad)
+    if(! $UseTable) set cmd = ($cmd --y $y --mask $mask)
+    if($UseTable)   set cmd = ($cmd --table $y)
     set cmd = ($cmd --sim-sign $simsign --fwhm $fwhm)
     if($#fsgd) set cmd = ($cmd --fsgd $fsgd $gd2mtx)
     if($#X)    set cmd = ($cmd --X $X)
     if($#wls)  set cmd = ($cmd --wls $wls)
-    if($#label) set cmd = ($cmd --label $label)
+    #if($#label) set cmd = ($cmd --label $label)
     if($PermForce) set cmd = ($cmd --perm-force)
     if($anattype == surface) set cmd = ($cmd --surf $subject $hemi $surf);
     if($#Seed) set cmd = ($cmd --seed $Seed);
     if($UseUniformPDF) set cmd = ($cmd --uniform $UniformPDFMin $UniformPDFMax);
-    if($DiagCluster) set cmd = ($cmd --diag-cluster)
+    if($DiagCluster) set cmd = ($cmd --diag-cluster --debug)
+    if($?verbose) set cmd = ($cmd --debug)
     if($DoPoll) then
       set DoneFile = $PollDir/done.$csdbase.$jpad
       rm -f $DoneFile
@@ -463,7 +486,7 @@ endif #DoSim
 if($DoPBSubmit) then
   # pbsubmit the surfcluster part
   set cmd = (mri_glmfit-sim --glmdir $glmdir  --tmp $tmpdir)
-  set cmd = ($cmd --sim-sign $simsign --no-sim $csdbase)
+  set cmd = ($cmd --sim-sign $simsign --no-sim $csdbase --cwpvalthresh $cwpvalthresh)
   set cmd = ($cmd --log $LF)
   echo "------------------------------------------------" | tee -a $LF
   echo $cmd  | tee -a $LF
@@ -478,6 +501,7 @@ endif
 
 # -------------- now run clustering -------------------- #
 foreach conname ($conlist)
+  if($UseTable) continue;
 
   set csdlist = ();
   if(! $UseGRF) then
@@ -504,14 +528,14 @@ foreach conname ($conlist)
   set cwsig = $glmdir/$conname/$csdbase.sig.cluster.$ext
   set msig  = $glmdir/$conname/$csdbase.sig.masked.$ext
   set ocn   = $glmdir/$conname/$csdbase.sig.ocn.$ext
-  set annot = $glmdir/$conname/$csdbase.sig.ocn.annot
+  set oannot = $glmdir/$conname/$csdbase.sig.ocn.annot
   set sum   = $glmdir/$conname/$csdbase.sig.cluster.summary
   set csdpdf = $glmdir/$conname/$csdbase.pdf.dat
 
   if($anattype == surface) then
     set cmd = (mri_surfcluster --in $sig $csdlist --mask $mask \
       --cwsig $cwsig --vwsig $vwsig --sum $sum --ocn $ocn \
-      --oannot $annot --annot aparc --csdpdf $csdpdf \
+      --oannot $oannot --annot $annot --csdpdf $csdpdf \
       --cwpvalthresh $cwpvalthresh --o $msig --no-fixmni)
     if($Bonferroni) set cmd = ($cmd --bonferroni $Bonferroni)
     if($ReportCentroid) set cmd = ($cmd --centroid);
@@ -665,6 +689,14 @@ while( $#argv != 0 )
       set LF = $argv[1]; shift;
       breaksw
 
+    case "--a2009s":
+      set annot = "aparc.a2009s"
+      breaksw
+    case "--annot":
+      if( $#argv < 1) goto arg1err;
+      set annot = $argv[1]; shift;
+      breaksw
+
     case "--overwrite":
       set Overwrite = 1;
       breaksw
@@ -732,6 +764,7 @@ while( $#argv != 0 )
       breaksw
 
     case "--cwpvalthresh":
+    case "--cwp":
       if($#argv < 1) goto arg1err;
       set cwpvalthresh = $argv[1]; shift;
       breaksw
@@ -836,7 +869,7 @@ usage_exit:
   echo " --grf threshold sign : -log10(p) and pos or neg (volumes only)"
   echo ""
   echo " --sim nulltype nsim threshold csdbase"
-  echo " --sim-sign sign : <abs>,pos,neg"
+  echo " --sim-sign sign : abs,pos,neg"
   echo ""
   echo " --2spaces : additional Bonferroni correction across 2 spaces (eg, lh, rh)"
   echo " --3spaces : additional Bonferroni correction across 3 spaces (eg, lh, rh, mni305)"
@@ -844,6 +877,9 @@ usage_exit:
   echo " --overwrite : delete previous CSDs"
   echo " --bg njobs : divide sim into njobs and put in background"
   echo " --sleep tSleepSec : number of seconds to sleep between background polls "
+  echo ""
+  echo " --a2009s : use aparc.a2009s instead of aparc for reporting region of vertex max"
+  echo " --annot annot : use annot instead of aparc for reporting region of vertex max"
   echo ""
   echo " --log logfile : default is csdbase.mri_glmfit-sim.log"
   echo ""
@@ -913,7 +949,10 @@ To use this program:
 6. Select the threshold sign (--sim-sign). This is the sign of the
    threshold used to create the clusters for cluster-wise correction
    of multiple comparisons. Options are abs (unsigned), pos
-   (positive), and neg (negative).
+   (positive), and neg (negative). If you have an a priori hypothesis
+   (eg, group1 > group2), then choose positive. If you don not know
+   the sign, then use abs. Choosing a sign will yield stronger results
+   (ie, smaller p-values), but you will lose the other sign.
 
 Now run the command:
 

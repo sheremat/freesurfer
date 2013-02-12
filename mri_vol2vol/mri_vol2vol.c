@@ -11,8 +11,8 @@
  * Original Author: Doug Greve
  * CVS Revision Info:
  *    $Author: lzollei $
- *    $Date: 2011/03/16 21:56:31 $
- *    $Revision: 1.69 $
+ *    $Date: 2012/11/08 23:46:11 $
+ *    $Revision: 1.78 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -36,11 +36,12 @@ mri_vol2vol
   --o    outvol       : output volume
   --disp dispvol      : displacement volume
 
+  --lta  register.lta : Linear Transform Array (usually only 1 transform)
   --reg  register.dat : tkRAS-to-tkRAS matrix   (tkregister2 format)
   --fsl  register.fsl : fslRAS-to-fslRAS matrix (FSL format)
   --xfm  register.xfm : ScannerRAS-to-ScannerRAS matrix (MNI format)
   --regheader         : ScannerRAS-to-ScannerRAS matrix = identity
-  --mni152reg         : $FREESURFER_HOME/average/mni152.register.dat
+  --mni152reg         : target MNI152 space (need FSL installed)
   --s subject         : set matrix = identity and use subject for any templates
 
   --inv               : sample from targ to mov
@@ -57,9 +58,11 @@ mri_vol2vol
 
   --trilin            : trilinear interpolation (default)
   --nearest           : nearest neighbor interpolation
+  --cubic             : cubic B-Spline interpolation
   --interp interptype : interpolation trilin or nearest (def is trilin)
 
   --precision precisionid : output precision (def is float)
+  --keep-precision  : set output precision to that of input
   --kernel            : save the trilinear interpolation kernel instead
 
   --no-resample : do not resample, just change vox2ras matrix
@@ -137,6 +140,17 @@ with the identity matrix in it. This can be used with some SPM
 registrations (which change only the matrix in the .mat file).
 Same as in tkregister2.
 
+--mni152reg 
+
+Target MNI152 space. If the mov volume is in the native space of an
+individual, then also supply a registration (--reg). This registration
+is concatenated with that in subject/mri/transforms/reg.mni152.2mm.dat
+(created with mni152reg) to produce a registration from the mov vol
+to MNI152 (defined by $FSLDIR/data/standard/MNI152_T1_2mm.nii.gz).
+If the data are in fsaverage 2mm space, then do not supply a --reg.
+Instead, $FREESURFER_HOME/average/mni152.register.dat is used
+as the registration. Do not supply a target volume with --mni152reg.
+
 --inv
 
 Invert the transform. The movvol becomes the geometry template for the
@@ -195,13 +209,15 @@ updated to reflect the new limits.
 --interp method
 
 Interpolate the output based on the given method. Legal values are:
-trilin and nearest. trilin is the default. Can also use --trilin
-or --nearest.
+cubic, trilin and nearest. trilin is the default. Can also use
+--cubic, --trilin or --nearest.
 
 --precision precisionid
 
 Set output precision to precisionid. Legal values are uchar, short,
 int, long, and float. Default is float.
+
+--keep-precision  : set output precision to that of input
 
 --kernel
 
@@ -427,6 +443,7 @@ ENDHELP --------------------------------------------------------------
 #include "fio.h"
 #include "pdf.h"
 #include "cmdargs.h"
+#include "mri_circulars.h"
 
 #include "chronometer.h"
 
@@ -462,7 +479,7 @@ MATRIX *LoadRfsl(char *fname);
 
 int main(int argc, char *argv[]) ;
 
-static char vcid[] = "$Id: mri_vol2vol.c,v 1.69 2011/03/16 21:56:31 lzollei Exp $";
+static char vcid[] = "$Id: mri_vol2vol.c,v 1.78 2012/11/08 23:46:11 lzollei Exp $";
 char *Progname = NULL;
 
 int debug = 0, gdiagno = -1;
@@ -478,6 +495,8 @@ char *fslregfile=NULL;
 char *tempvolfile=NULL;
 int  invert=0;
 int  fstal=0;
+LTA  *lta=NULL;
+int  usedltageom=0;
 int  fstalres = 2; // Can only be 1 or 2
 char *precision = "float";
 int   precisioncode = MRI_FLOAT;
@@ -504,6 +523,7 @@ char *talxfmfile = "talairach.xfm";
 
 char *talsubject = NULL;
 char *subject = NULL;
+char *MNIsubject = "21_vc716";
 char *subject_outreg = NULL;
 
 int dont_irescale = 1;
@@ -523,7 +543,9 @@ int DoMorph = 0;
 int InvertMorph = 0;
 TRANSFORM *Rtransform;  //types : M3D, M3Z, LTA, FSLMAT, DAT, OCT(TA), XFM
 GCAM      *gcam;
+GCAM      *MNIgcam;
 char gcamfile[1000];
+char MNIgcamfile[1000];
 MRI_REGION region;
 char *m3zfile = "talairach.m3z";
 
@@ -559,6 +581,8 @@ MRI *vsm = NULL;
 char *vsmvolfile=NULL;
 
 int defM3zPath = 1; // use deafult path to the m3z file
+int TargMNI152 = 0;
+int keepprecision = 0;
 
 /*---------------------------------------------------------------*/
 int main(int argc, char **argv) {
@@ -576,13 +600,13 @@ int main(int argc, char **argv) {
 
 
   make_cmd_version_string(argc, argv,
-                          "$Id: mri_vol2vol.c,v 1.69 2011/03/16 21:56:31 lzollei Exp $",
-                          "$Name: stable5 $", cmdline);
+                          "$Id: mri_vol2vol.c,v 1.78 2012/11/08 23:46:11 lzollei Exp $",
+                          "$Name:  $", cmdline);
 
   /* rkt: check for and handle version tag */
   nargs = handle_version_option(argc, argv,
-                                "$Id: mri_vol2vol.c,v 1.69 2011/03/16 21:56:31 lzollei Exp $",
-                                "$Name: stable5 $");
+                                "$Id: mri_vol2vol.c,v 1.78 2012/11/08 23:46:11 lzollei Exp $",
+                                "$Name:  $");
   if(nargs && argc - nargs == 1) exit (0);
 
   Progname = argv[0] ;
@@ -609,6 +633,8 @@ int main(int argc, char **argv) {
   dump_options(stdout);
 
   if(DoCrop){
+    //printf("\n"); 
+    //printf("DoCrop \n"); 
     printf("Crop %lf\n",CropScale);
     mov = MRIread(movvolfile);
     if(mov == NULL) exit(1);
@@ -655,6 +681,7 @@ int main(int argc, char **argv) {
   if (fstal) {
     // Recompute R for converting to/from talairach space
     // and set the target volume file
+    printf("\n"); 
     printf("Compute R for talairach space\n");
     Xtal = DevolveXFM(subject, NULL, talxfmfile);
     invXtal = MatrixInverse(Xtal,NULL);
@@ -684,9 +711,17 @@ int main(int argc, char **argv) {
 
   if(!invert) {
     // dont invert
+    //printf("\n"); 
+    //printf("Don't invert!\n"); 
     mov = MRIread(movvolfile);
     if (mov == NULL) exit(1);
-    targ = MRIreadHeader(targvolfile,MRI_VOLUME_TYPE_UNKNOWN);
+    if (targvolfile != NULL ) targ = MRIreadHeader(targvolfile,MRI_VOLUME_TYPE_UNKNOWN);
+    else if (lta != NULL)
+    {
+       targ = MRIclone(mov,targ);
+       MRIcopyVolGeomToMRI(targ,&lta->xforms[0].dst); 
+       usedltageom = 1;
+    }
     if (targ == NULL) exit(1);
     in = mov;
     template = targ;
@@ -694,33 +729,48 @@ int main(int argc, char **argv) {
   }
   else{
     //invert
-    mov = MRIreadHeader(movvolfile,MRI_VOLUME_TYPE_UNKNOWN);
-    if(mov == NULL) exit(1);
-    targ = MRIread(targvolfile);
+    printf("\n"); 
+    printf("Invert!\n"); 
+    if (targvolfile != NULL ) targ = MRIread(targvolfile);
     if(targ == NULL) exit(1);
+    if (movvolfile != NULL) mov = MRIreadHeader(movvolfile,MRI_VOLUME_TYPE_UNKNOWN);
+    else if (lta != NULL)
+    {
+       mov = MRIclone(targ,mov);
+       MRIcopyVolGeomToMRI(mov,&lta->xforms[0].src); 
+       usedltageom = 1;
+    }    
+    if(mov == NULL) exit(1);
     in = targ;
     template = mov;
     tempvolfile = movvolfile;
   }
   if(synth) {
+    printf("\n"); 
     printf("Replacing input data with synthetic white noise\n");
     MRIrandn(in->width,in->height,in->depth,in->nframes,0,1,in);
   }
 
   if(regheader) {
+    printf("\n"); 
     printf("Computing registration based on scanner-to-scanner\n");
     R = MRItkRegMtx(targ,mov,XFM);
   }
 
   if(fslregfile) {
+    printf("\n"); 
     printf("Computing registration based on fsl registration\n");
     R = MRIfsl2TkReg(targ, mov, Rfsl);
     if(Rfsl2) R2 = MRIfsl2TkReg(targ, mov, Rfsl2);
   }
 
   if(R == NULL)
-    ErrorExit(ERROR_BADPARM, "ERROR: no registration specified\n") ;
+    ErrorExit(ERROR_BADPARM, "ERROR: no registration (R) is specified\n") ;
 
+  //printf("\n"); 
+  //printf("Registration:\n");
+  //MatrixPrint(stdout,R);
+  //printf("\n");
 
   if(R2){
     R = MatrixSubtract(R,R2,R);
@@ -768,10 +818,10 @@ int main(int argc, char **argv) {
     R = MatrixInverse(R,NULL);
   }
 
-  printf("\n");
-  printf("Final tkRAS-to-tkRAS Matrix is:\n");
-  MatrixPrint(stdout,R);
-  printf("\n");
+  //printf("\n");
+  //printf("Final tkRAS-to-tkRAS Matrix is:\n");
+  //MatrixPrint(stdout,R);
+  //printf("\n");
 
   if(DispFile){
     printf("Computing affine displacment\n");
@@ -844,10 +894,10 @@ int main(int argc, char **argv) {
   vox2vox = MatrixMultiply(invTin,R,NULL);
   MatrixMultiply(vox2vox,Ttemp,vox2vox);
 
-  printf("\n");
-  printf("Vox2Vox Matrix is:\n");
-  MatrixPrint(stdout,vox2vox);
-  printf("\n");
+  //printf("\n");
+  //printf("Vox2Vox Matrix is:\n");
+  //MatrixPrint(stdout,vox2vox);
+  //printf("\n");
 
   // Allocate the output
   template->type = precisioncode;
@@ -883,7 +933,7 @@ int main(int argc, char **argv) {
   }
   else {
     Rtransform = (TRANSFORM *)calloc(sizeof(TRANSFORM),1);
-    Rtransform->xform = (void *)TransformRegDat2LTA(template, mov, R);
+    Rtransform->xform = (void *)TransformRegDat2LTA(template, mov, R); // LZ: this is where the morphing goes wrong.....
 
     printf("Reading gcam\n");
     if (defM3zPath)
@@ -900,11 +950,24 @@ int main(int argc, char **argv) {
       GCAMapplyTransform(gcam, Rtransform);  //voxel2voxel
       printf("Applying morph to input\n");
       out = GCAMmorphToAtlas(in, gcam, NULL, -1, interpcode);
+
+      //sprintf(MNIgcamfile,"%s/transforms/talairach.m3z", fio_dirname(gcam->atlas.fname));
+      //printf("The MNI gcam fname is: %s\n", MNIgcamfile);      
+      //MNIgcam = GCAMread(MNIgcamfile);
+      //out = GCAMmorphToAtlasToMNI(in, gcam, MNIgcam, NULL, -1, interpcode);
     }
     else{
       //mri_vol2vol --mov orig.morphed.mgz --inv-morph --s subject --o origB.mgz
-      gcam = GCAMreadAndInvert(gcamfile);
+      gcam = GCAMread(gcamfile);
       if(gcam == NULL) exit(1);
+      {
+	MRI *mri_tmp ;
+	mri_tmp = MRIalloc(gcam->image.width, gcam->image.height, gcam->image.depth, MRI_FLOAT) ;
+	useVolGeomToMRI(&gcam->image, mri_tmp);
+	
+	GCAMinvert(gcam, mri_tmp) ;
+	MRIfree(&mri_tmp) ;
+      }
       printf("Applying reg to gcam\n");
       GCAMapplyTransform(gcam, Rtransform);  //voxel2voxel
       if (0) { //(in->type != MRI_UCHAR){
@@ -980,16 +1043,36 @@ int main(int argc, char **argv) {
   }
 
   if(SaveReg) {
+    sprintf(regfile0,"%s.lta",outvolfile);
+    printf("INFO: writing registration to %s\n",regfile0);
+    if (lta) LTAfree(&lta);
+    lta = LTAalloc(1, NULL) ;
+    lta->xforms[0].sigma = 10000.000f ;
+    lta->xforms[0].x0 = lta->xforms[0].y0 = lta->xforms[0].z0 = 0 ;
+    strcpy(lta->subject, subject_outreg); 
+    MatrixCopy(R, lta->xforms[0].m_L) ;
+    lta->type = REGISTER_DAT;
+    lta->fscale  = 1;
+    LTAmodifySrcDstGeom(lta,in,template);
+    LTAchangeType(lta,LINEAR_VOX_TO_VOX);
+    LTAwrite(lta,regfile0);    
+    LTAfree(&lta);
+    
+     
     sprintf(regfile0,"%s.reg",outvolfile);
-    printf("INFO: wAriting registration matrix to %s\n",regfile0);
+    printf("INFO: writing registration matrix to %s\n",regfile0);
     regio_write_register(regfile0,subject_outreg,out->xsize,
                          out->zsize,1,R,FLT2INT_ROUND);
-    printf("To check registration, run:\n");
-    printf("\n");
     if (!fstal) {
-      printf("  tkregister2 --mov %s --targ %s --reg %s \n",
-             outvolfile,tempvolfile,regfile0);
+      if (! usedltageom ){
+        printf("To check registration, run:\n");
+        printf("\n");
+        printf("  tkregister2 --mov %s --targ %s --reg %s \n",
+               outvolfile,tempvolfile,regfile0);
+      }
     }  else {
+      printf("To check registration, run:\n");
+      printf("\n");
       printf("  tkregister2 --s %s --surf white --reg %s --mov %s \n",
              subject_outreg,regfile0,outvolfile);
     }
@@ -1013,6 +1096,7 @@ static int parse_commandline(int argc, char **argv) {
   int  nargc , nargsused;
   char **pargv, *option ;
   int err;
+  char tmp[1000];
 
   if (argc < 1) usage_exit();
 
@@ -1064,7 +1148,7 @@ static int parse_commandline(int argc, char **argv) {
       nargsused = 1;
     } else if (istringnmatch(option, "--noDefM3zPath",0)) {
       defM3zPath = 0; // use the m3z file as it is; no assumed location
-      R = MatrixIdentity(4,NULL); // as subjid is not neccesary any more
+      if(R == NULL) R = MatrixIdentity(4,NULL); // as subjid is not neccesary any more
       printf("Using the m3z file as it is; no assumed location.\n");
     } else if (istringnmatch(option, "--mov",0)) {
       if (nargc < 1) argnerr(option,1);
@@ -1085,15 +1169,46 @@ static int parse_commandline(int argc, char **argv) {
       regfile = pargv[0];
       err = regio_read_register(regfile, &subject, &ipr, &bpr,
                                 &intensity, &R, &float2int);
+      printf("\n");
+      printf("Matrix from regfile:\n");
+      MatrixPrint(stdout,R);
+      printf("\n");
       if (err) exit(1);
       nargsused = 1;
     } 
+    else if (istringnmatch(option, "--lta",0)) {
+      if (nargc < 1) argnerr(option,1);
+      regfile = pargv[0];
+      if(stricmp(FileNameExtension(regfile, tmp), "LTA")){
+        printf("LTA registration file needs to have .lta extension!\n");
+        exit(1);        
+      }
+      lta = LTAread(regfile) ;
+      if(lta == NULL){
+	printf("ERROR reading LTA %s !\n",regfile);        
+	exit(1) ;
+      }
+      if (!lta->xforms[0].src.valid){
+	printf("ERROR LTA %s has no valid src geometry!\n",regfile);        
+	exit(1) ;       
+      }
+      if (!lta->xforms[0].dst.valid){
+	printf("ERROR LTA %s has no valid dst geometry!\n",regfile);        
+	exit(1) ; 
+      }
+      if(lta->subject[0]==0) strcpy(lta->subject, "subject-unknown"); 
+      subject = (char *) calloc(strlen(lta->subject)+2,sizeof(char));
+      strcpy(subject, lta->subject) ;
+      intensity = lta->fscale ;
+      float2int = FLT2INT_ROUND ;
+      //err = regio_read_register(regfile, &subject, &ipr, &bpr,
+      //                          &intensity, &R, &float2int);
+      nargsused = 1;
+    } 
     else if (istringnmatch(option, "--mni152reg",0)) {
-      sprintf(tmpstr,"%s/average/mni152.register.dat",getenv("FREESURFER_HOME"));
-      regfile = strcpyalloc(tmpstr);
-      err = regio_read_register(regfile, &subject, &ipr, &bpr,
-                                &intensity, &R, &float2int);
-      if (err) exit(1);
+      TargMNI152 = 1;
+      sprintf(tmpstr,"%s/data/standard/MNI152_T1_2mm.nii.gz",getenv("FSLDIR"));
+      targvolfile = strcpyalloc(tmpstr);
     } 
     else if (istringnmatch(option, "--reg-final",0)) {
       if (nargc < 1) argnerr(option,1);
@@ -1182,6 +1297,9 @@ static int parse_commandline(int argc, char **argv) {
     else if (istringnmatch(option, "--nearest",7)) {
       interpmethod = "nearest";
     } 
+    else if (istringnmatch(option, "--cubic",0)) {
+      interpmethod = "cubic";
+    } 
     else if (istringnmatch(option, "--precision",0)) {
       if (nargc < 1) argnerr(option,1);
       precision = pargv[0];
@@ -1192,7 +1310,11 @@ static int parse_commandline(int argc, char **argv) {
         exit(1);
       }
       nargsused = 1;
-    } else if (!strcasecmp(option, "--seed")) {
+    } 
+    else if (istringnmatch(option, "--keep-precision",0)) {
+      keepprecision = 1;
+    } 
+    else if (!strcasecmp(option, "--seed")) {
       if (nargc < 1) CMDargNErr(option,1);
       sscanf(pargv[0],"%d",&SynthSeed);
       synth = 1;
@@ -1272,22 +1394,23 @@ printf("  --targ targvol      : output template (or input with --inv)\n");
 printf("  --o    outvol       : output volume\n");
 printf("  --disp dispvol      : displacement volume\n");
 printf("\n");
+printf("  --lta  register.lta : Linear Transform Array (usually only 1 transform)\n");
 printf("  --reg  register.dat : tkRAS-to-tkRAS matrix   (tkregister2 format)\n");
 printf("  --fsl  register.fsl : fslRAS-to-fslRAS matrix (FSL format)\n");
 printf("  --xfm  register.xfm : ScannerRAS-to-ScannerRAS matrix (MNI format)\n");
 printf("  --regheader         : ScannerRAS-to-ScannerRAS matrix = identity\n");
-printf("  --mni152reg         : $FREESURFER_HOME/average/mni152.register.dat\n");
+printf("  --mni152reg         : target MNI152 space (need FSL installed)\n");
 printf("  --s subject         : set matrix = identity and use subject for any templates\n");
 printf("\n");
 printf("  --inv               : sample from targ to mov\n");
 printf("\n");
-printf("  --m3z               : the non-linear warp to be applied\n");
-printf("  --noDefM3zPath      : do not use the default non-linear morph path; look at --m3z\n");
-printf("  --inv-morph         : invert the non-linear warp to be applied\n");
-printf("\n");
 printf("  --tal               : map to a sub FOV of MNI305 (with --reg only)\n");
 printf("  --talres resolution : set voxel size 1mm or 2mm (def is 1)\n");
 printf("  --talxfm xfmfile    : default is talairach.xfm (looks in mri/transforms)\n");
+printf("\n");
+printf("  --m3z morph    : non-linear morph encoded in the m3z format\n");
+printf("  --noDefM3zPath : flag indicating that the code should not be looking for the non-linear m3z morph in the default location (subj/mri/transforms), but should use the morph name as is\n");
+printf("  --inv-morph    : compute and use the inverse of the m3z morph\n");
 printf("\n");
 printf("  --fstarg <vol>      : use vol <orig.mgz> from subject in --reg as target\n");
 printf("  --crop scale        : crop and change voxel size\n");
@@ -1297,9 +1420,11 @@ printf("  --slice-bias alpha  : apply half-cosine bias field\n");
 printf("\n");
 printf("  --trilin            : trilinear interpolation (default)\n");
 printf("  --nearest           : nearest neighbor interpolation\n");
-printf("  --interp interptype : interpolation trilin or nearest (def is trilin)\n");
+printf("  --cubic             : cubic B-Spline interpolation\n");
+printf("  --interp interptype : interpolation cubic, trilin, nearest (def is trilin)\n");
 printf("\n");
 printf("  --precision precisionid : output precision (def is float)\n");
+printf("  --keep-precision  : set output precision to that of input\n");
 printf("  --kernel            : save the trilinear interpolation kernel instead\n");
 printf("\n");
 printf("  --no-resample : do not resample, just change vox2ras matrix\n");
@@ -1354,25 +1479,6 @@ printf("is the same as the file passed to and generated by tkregister2 with\n");
 printf("the --reg flag. If --tal or --fstarg is specified, then the subject\n");
 printf("is obtained from the regfile.\n");
 printf("\n");
-printf("--m3z morph.m3z\n");
-printf("\n");
-printf("This is the morph to be applied to the volume. Unless the morph is in \n");
-printf("mri/transforms (eg.: for talairach.m3z computed by reconall), you will\n");
-printf("need to specify the full path to this morph and use the --noDefM3zPath\n");
-printf("flag.\n");
-printf("\n");
-printf("--noDefM3zPath\n");
-printf("\n");
-printf("To be used with the m3z flag. Instructs the code not to look for the m3z\n");
-printf("morph in the default location (SUBJECTS_DIR/subj/mri/transforms), but \n");
-printf("instead just use the path indicated in --m3z.\n");
-printf("\n");
-printf("--inv-morph\n");
-printf("\n");
-printf("Compute and use the inverse of the non-linear morph to resample the \n");
-printf("input volume. To be used by --m3z. \n");
-
-printf("\n");
 printf("--fsl register.fsl\n");
 printf("\n");
 printf("Registration matrix created with the FSL flirt program using targ as\n");
@@ -1396,6 +1502,17 @@ printf("with the identity matrix in it. This can be used with some SPM\n");
 printf("registrations (which change only the matrix in the .mat file).\n");
 printf("Same as in tkregister2.\n");
 printf("\n");
+printf("--mni152reg \n");
+printf("\n");
+printf("Target MNI152 space. If the mov volume is in the native space of an\n");
+printf("individual, then also supply a registration (--reg). This registration\n");
+printf("is concatenated with that in subject/mri/transforms/reg.mni152.2mm.dat\n");
+printf("(created with mni152reg) to produce a registration from the mov vol\n");
+printf("to MNI152 (defined by $FSLDIR/data/standard/MNI152_T1_2mm.nii.gz).\n");
+printf("If the data are in fsaverage 2mm space, then do not supply a --reg.\n");
+printf("Instead, $FREESURFER_HOME/average/mni152.register.dat is used\n");
+printf("as the registration. Do not supply a target volume with --mni152reg.\n");
+printf("\n");
 printf("--inv\n");
 printf("\n");
 printf("Invert the transform. The movvol becomes the geometry template for the\n");
@@ -1410,6 +1527,8 @@ printf("movvol space (and so will have the same geometry as the movvol). By\n");
 printf("default, the output volume will be float, but this can be changed\n");
 printf("with --precision. By default, the interpolation will be done with\n");
 printf("trilinear, but this can be changed with --interp.\n");
+printf("\n");
+printf("  --keep-precision  : set output precision to that of input\n");
 printf("\n");
 printf("--tal\n");
 printf("\n");
@@ -1454,8 +1573,8 @@ printf("\n");
 printf("--interp method\n");
 printf("\n");
 printf("Interpolate the output based on the given method. Legal values are:\n");
-printf("trilin and nearest. trilin is the default. Can also use --trilin\n");
-printf("or --nearest.\n");
+printf("cubic, trilin and nearest. trilin is the default. Can also use\n");
+printf("--cubic, --trilin or --nearest.\n");
 printf("\n");
 printf("--precision precisionid\n");
 printf("\n");
@@ -1664,10 +1783,26 @@ static void check_options(void) {
     printf("ERROR: SUBJECTS_DIR undefined.\n");
     exit(1);
   }
-  if (movvolfile == NULL) {
+  if (movvolfile == NULL && ( lta == NULL || ! invert) ) {
     printf("ERROR: No mov volume supplied.\n");
     exit(1);
   }
+  if(lta != NULL){
+    MRI *mrimovtmp,*mritrgtmp;
+    printf("%s %s\n",movvolfile,targvolfile);
+    mrimovtmp = MRIreadHeader(movvolfile,MRI_VOLUME_TYPE_UNKNOWN);
+    if(mrimovtmp == NULL) exit(1);
+    mritrgtmp = MRIreadHeader(targvolfile,MRI_VOLUME_TYPE_UNKNOWN);
+    if(mritrgtmp == NULL) exit(1);
+    lta = LTAchangeType(lta,LINEAR_RAS_TO_RAS);
+    LTAmodifySrcDstGeom(lta, mrimovtmp, mritrgtmp);
+    R = TransformLTA2RegDat(lta);
+    ipr = lta->xforms[0].src.xsize ;
+    bpr = lta->xforms[0].src.zsize ;
+    MRIfree(&mrimovtmp);
+    MRIfree(&mritrgtmp);
+  }
+
   if(outvolfile == NULL && DispFile == NULL) {
     printf("ERROR: No output volume supplied.\n");
     exit(1);
@@ -1680,8 +1815,46 @@ static void check_options(void) {
       exit(1);
     }
   }
+  if(fstal && regheader){
+    printf("ERROR: cannot use --tal and --regheader\n");
+    exit(1);
+  }
+  if(keepprecision){
+    mov = MRIreadHeader(movvolfile,MRI_VOLUME_TYPE_UNKNOWN);
+    if(mov==NULL) exit(1);
+    precisioncode = mov->type;
+    precision = MRIprecisionString(precisioncode);
+    MRIfree(&mov);
+  }
+  if(TargMNI152){
+    if(regfile == NULL){
+      sprintf(tmpstr,"%s/average/mni152.register.dat",getenv("FREESURFER_HOME"));
+      regfile = strcpyalloc(tmpstr);
+      err = regio_read_register(regfile, &subject, &ipr, &bpr,
+                                &intensity, &R, &float2int);
+      if (err) exit(1);
+    } else {
+      MATRIX *Q, *invQ, *M;
+      sprintf(tmpstr,"%s/%s/mri/transforms/reg.mni152.2mm.dat",SUBJECTS_DIR,subject);
+      Q = regio_read_registermat(tmpstr);
+      if(Q == NULL){
+	printf("Run mni152reg --s %s to create reg.mni152.2mm.dat\n",subject);
+	exit(1);
+      }
+      invQ = MatrixInverse(Q,NULL);
+      M = MatrixMultiply(R,invQ,NULL);
+      MatrixFree(&R);
+      R = MatrixCopy(M,NULL);
+      MatrixFree(&Q);
+      MatrixFree(&invQ);
+      MatrixFree(&M);
+      printf("New MNI152 R\n");
+      MatrixPrint(stdout,R);
+    }
+  }
+  
 
-  if(!fstal && !DoCrop && !fstarg && targvolfile == NULL) {
+  if(!fstal && !DoCrop && !fstarg && targvolfile == NULL &&  ( lta == NULL || invert) ) {
     printf("ERROR: No targ volume supplied.\n");
     exit(1);
   }

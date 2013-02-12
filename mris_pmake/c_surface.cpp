@@ -8,9 +8,9 @@
 /*
  * Original Author: Rudolph Pienaar / Christian Haselgrove
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.12 $
+ *    $Author: rudolph $
+ *    $Date: 2012/07/05 21:21:28 $
+ *    $Revision: 1.15 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -33,18 +33,19 @@
 
 void
 surface_vertexFunction_do(
-  s_env&   st_env,
-  bool   (*vertex_satisfyTestCondition)
-  (VERTEX* pvertex,
-   void*  pv_extra),
-  void*   apv_conditional,
-  void   (*vertex_function)
-  (VERTEX* pvertex,
-   void*  pv_extra),
-  void*   apv_functional
+      s_env&            st_env,
+      bool              (*vertex_satisfyTestCondition)
+                              (VERTEX*  pvertex,
+                               void*    pv_extra),
+      void*             apv_conditional,
+      void              (*vertex_function)
+                              (VERTEX*  pvertex,
+                               void*    pv_extra),
+      void*             apv_functional
 ) {
-  int  i;
-  VERTEX* pvertex;
+
+    int         i;
+    VERTEX*     pvertex;
 
   for (i = 0;i < st_env.pMS_active->nvertices;i++) {
     pvertex = &st_env.pMS_active->vertices[i];
@@ -220,12 +221,12 @@ surface_averageIntegratedCurveArea_do(
 
   if (!calls) {
     ULOUT("Computing Second Fundamental Form on primary\t\t\t");
-    MRISsetNeighborhoodSize(st_env.pMS_curvature, 2) ;
-    MRIScomputeSecondFundamentalForm(st_env.pMS_curvature);
+    MRISsetNeighborhoodSize(st_env.pMS_primary, 2) ;
+    MRIScomputeSecondFundamentalForm(st_env.pMS_primary);
     nULOUT("[ ok ]\n");
-    ULOUT("Computing Second Fundamental Form on auxillary\t\t\t");
-    MRISsetNeighborhoodSize(st_env.pMS_auxSurface, 2) ;
-    MRIScomputeSecondFundamentalForm(st_env.pMS_auxSurface);
+    ULOUT("Computing Second Fundamental Form on secondary\t\t\t");
+    MRISsetNeighborhoodSize(st_env.pMS_secondary, 2) ;
+    MRIScomputeSecondFundamentalForm(st_env.pMS_secondary);
     nULOUT("[ ok ]\n");
   }
 
@@ -278,11 +279,11 @@ surface_correlationFunction_do(
   VERTEX* pvertex  = NULL;
   void* pv_void  = NULL;
 
-  for (int i = 0;i < st_env.pMS_curvature->nvertices;i++) {
-    pvertex = &st_env.pMS_curvature->vertices[i];
+  for (int i = 0;i < st_env.pMS_primary->nvertices;i++) {
+    pvertex = &st_env.pMS_primary->vertices[i];
     if (vertex_ripFlagIsTrue(pvertex, pv_void)) {
       denom++;
-      pvertex = &st_env.pMS_auxSurface->vertices[i];
+      pvertex = &st_env.pMS_secondary->vertices[i];
       if (vertex_ripFlagIsTrue(pvertex, pv_void)) {
         //cout << i << endl;
         membership++;
@@ -306,7 +307,7 @@ surface_correlationFunction_do(
 }
 
 void
-surface_workingToAux_ripTrueCopy(
+surface_primaryToSecondary_ripTrueCopy(
   s_env&  st_env
 ) {
 
@@ -319,8 +320,8 @@ surface_workingToAux_ripTrueCopy(
   pv_rip    = (void*) pch_rip;
 
   surface_vertexPatternCopy( st_env,
-                             st_env.pMS_curvature,
-                             st_env.pMS_auxSurface,
+                             st_env.pMS_primary,
+                             st_env.pMS_secondary,
                              vertex_ripFlagIsTrue,
                              pv_rip,
                              vertex_ripFlagMark,
@@ -380,11 +381,11 @@ surface_ripMark(
         if(st_env.b_costPathSave) {
             ofs << ii << "\t" << jj;
             ofs << "\t"  << f_cost;
-            ofs << "\t"  << st_env.st_iterInfo.iter;
-            ofs << "\t"  << st_env.st_iterInfo.f_distance;
-            ofs << "\t"  << st_env.st_iterInfo.f_curvature;
-            ofs << "\t"  << st_env.st_iterInfo.f_sulcalHeight;
-            ofs << "\t"  << st_env.st_iterInfo.f_dir;
+            ofs << "\t"  << st_env.pst_iterInfo->iter;
+            ofs << "\t"  << st_env.pst_iterInfo->f_distance;
+            ofs << "\t"  << st_env.pst_iterInfo->f_curvature;
+            ofs << "\t"  << st_env.pst_iterInfo->f_sulcalHeight;
+            ofs << "\t"  << st_env.pst_iterInfo->f_dir;
             ofs << endl;
         }
     }

@@ -7,8 +7,8 @@
  * Original Author: Douglas N. Greve
  * CVS Revision Info:
  *    $Author: greve $
- *    $Date: 2011/08/17 17:01:51 $
- *    $Revision: 1.66.2.2 $
+ *    $Date: 2012/06/11 17:46:18 $
+ *    $Revision: 1.80 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -32,6 +32,7 @@
 #include "diag.h"
 #include "mri.h"
 #include "mrisurf.h"
+#include "mriBSpline.h"
 #include "fio.h"
 #include "stats.h"
 #include "corio.h"
@@ -41,6 +42,9 @@
 #include "sig.h"
 #include "cma.h"
 #include "chronometer.h"
+
+//#define MRI2_TIMERS
+
 
 #include "affine.h"
 
@@ -718,6 +722,7 @@ int MRIvol2Vol(MRI *src, MRI *targ, MATRIX *Vt2s,
   int sinchw;
   MATRIX *V2Rsrc=NULL, *invV2Rsrc=NULL, *V2Rtarg=NULL;
   int FreeMats=0;
+  MRI_BSPLINE * bspline = NULL;
 
 #ifdef VERBOSE_MODE
   Chronometer tTotal, tSample;
@@ -779,6 +784,10 @@ int MRIvol2Vol(MRI *src, MRI *targ, MATRIX *Vt2s,
     exit( EXIT_FAILURE );
   }
 #else
+
+  if (InterpCode == SAMPLE_CUBIC_BSPLINE)
+    bspline = MRItoBSpline(src,NULL,3);
+
   for (ct=0; ct < targ->width; ct++)
   {
     for (rt=0; rt < targ->height; rt++)
@@ -817,10 +826,18 @@ int MRIvol2Vol(MRI *src, MRI *targ, MATRIX *Vt2s,
             case SAMPLE_NEAREST:
               valvect[f] = MRIgetVoxVal(src,ics,irs,iss,f);
               break ;
+            case SAMPLE_CUBIC_BSPLINE:
+              MRIsampleBSpline(bspline, fcs, frs, fss, f, &rval);
+              valvect[f] = rval;
+              break ;
             case SAMPLE_SINC:      /* no multi-frame */
               MRIsincSampleVolume(src, fcs, frs, fss, sinchw, &rval) ;
               valvect[f] = rval;
               break ;
+            default:
+              printf("ERROR: MRIvol2vol: interpolation method %i unknown\n",InterpCode);
+              exit(1);
+
             }
           }
         }
@@ -830,6 +847,7 @@ int MRIvol2Vol(MRI *src, MRI *targ, MATRIX *Vt2s,
 
       } /* target col */
     } /* target row */
+    exec_progress_callback(ct, targ->width, 0, 1);
   } /* target slice */
 #endif
 
@@ -847,6 +865,8 @@ int MRIvol2Vol(MRI *src, MRI *targ, MATRIX *Vt2s,
     MatrixFree(&V2Rtarg);
     MatrixFree(&Vt2s);
   }
+  
+  if (bspline) MRIfreeBSpline(&bspline);
 
 #ifdef VERBOSE_MODE
   StopChronometer( &tTotal );
@@ -992,7 +1012,7 @@ MRI *MRIvol2VolTLKernel(MRI *src, MRI *targ, MATRIX *Vt2s)
     3 slices mismatch
     4 frames mismatch - note: frameflag must = 1 to check frames
   ---------------------------------------------------------------*/
-int MRIdimMismatch(MRI *v1, MRI *v2, int frameflag)
+int MRIdimMismatch( const MRI *v1, const MRI *v2, int frameflag )
 {
   if (v1->width  != v2->width)  return(1);
   if (v1->height != v2->height) return(2);
@@ -2156,7 +2176,7 @@ MRI *MRIsquare(MRI *in, MRI *mask, MRI *out)
         for (f=0; f < in->nframes; f++)
         {
           if (mval > 0.5) val = MRIgetVoxVal(in,c,r,s,f);
-          else            val = 0.0;
+          else val = 0.0;
           MRIsetVoxVal(out,c,r,s,f,val*val);
         }
       }
@@ -2831,6 +2851,10 @@ int MRIvol2VolVSM(MRI *src, MRI *targ, MATRIX *Vt2s,
   sinchw = nint(param);
   valvect = (float *) calloc(sizeof(float),src->nframes);
 
+  MRI_BSPLINE * bspline = NULL;
+  if (InterpCode == SAMPLE_CUBIC_BSPLINE)
+    bspline = MRItoBSpline(src,NULL,3);
+    
   crsT = MatrixAlloc(4,1,MATRIX_REAL);
   crsT->rptr[4][1] = 1;
   crsS = MatrixAlloc(4,1,MATRIX_REAL);
@@ -2889,10 +2913,17 @@ int MRIvol2VolVSM(MRI *src, MRI *targ, MATRIX *Vt2s,
             case SAMPLE_NEAREST:
               valvect[f] = MRIgetVoxVal(src,ics,irs,iss,f);
               break ;
+            case SAMPLE_CUBIC_BSPLINE:     
+              MRIsampleBSpline(bspline, fcs, frs, fss, f, &rval);
+              valvect[f] = rval;
+              break ;
             case SAMPLE_SINC:      /* no multi-frame */
               MRIsincSampleVolume(src, fcs, frs, fss, sinchw, &rval) ;
               valvect[f] = rval;
               break ;
+            default:
+              printf("ERROR: MRIvol2volVSM: interpolation method %i unknown\n",InterpCode);
+              exit(1);
             }
           }
         }
@@ -2907,6 +2938,7 @@ int MRIvol2VolVSM(MRI *src, MRI *targ, MATRIX *Vt2s,
   free(valvect);
   MatrixFree(&crsS);
   MatrixFree(&crsT);
+  if (bspline) MRIfreeBSpline(&bspline);
   if (FreeMats)
   {
     MatrixFree(&V2Rsrc);
@@ -2919,10 +2951,14 @@ int MRIvol2VolVSM(MRI *src, MRI *targ, MATRIX *Vt2s,
 }
 
 /*---------------------------------------------------------------*/
-MRI *MRIvol2surfVSM(MRI *SrcVol, MATRIX *Rtk, MRI_SURFACE *TrgSurf,
-                    MRI *vsm, int InterpMethod, MRI *SrcHitVol,
-                    float ProjFrac, int ProjType, int nskip, 
-		    MRI *TrgVol)
+
+
+MRI *MRIvol2surfVSM( const MRI *SrcVol,
+                     const MATRIX *Rtk,
+                     const MRI_SURFACE *TrgSurf,
+                     const MRI *vsm, int InterpMethod, MRI *SrcHitVol,
+                     float ProjFrac, int ProjType, int nskip, 
+		     MRI *TrgVol )
 {
   MATRIX *ras2vox, *vox2ras;
   AffineVector Scrs, Txyz;
@@ -2934,7 +2970,12 @@ MRI *MRIvol2surfVSM(MRI *SrcVol, MATRIX *Rtk, MRI_SURFACE *TrgSurf,
   int frm, vtx,nhits, err;
   double rval,val;
   float Tx, Ty, Tz;
-  VERTEX *v ;
+  const VERTEX *v ;
+
+#ifdef MRI2_TIMERS
+  Chronometer tLoop;
+  InitChronometer( &tLoop );
+#endif
 
   if (vsm)  {
     err = MRIdimMismatch(vsm,SrcVol,0);
@@ -2982,12 +3023,26 @@ MRI *MRIvol2surfVSM(MRI *SrcVol, MATRIX *Rtk, MRI_SURFACE *TrgSurf,
 
   SetAffineMatrix( &ras2voxAffine, ras2vox );
 
+  MRI_BSPLINE * bspline = NULL;
+  if (InterpMethod == SAMPLE_CUBIC_BSPLINE)
+    bspline = MRItoBSpline(SrcVol,NULL,3);
+
+
   /*--- loop through each vertex ---*/
+#ifdef MRI2_TIMERS
+  StartChronometer( &tLoop );
+  unsigned int skipped = 0;
+#endif
   for (vtx = 0; vtx < TrgSurf->nvertices; vtx+=nskip)
   {
     v = &TrgSurf->vertices[vtx] ;
-    if (v->ripflag)
-      continue ;
+    if( v->ripflag ) {
+#ifdef MRI2_TIMERS
+      skipped++;
+#endif
+      continue;
+    }
+
     if (ProjFrac != 0.0)
     {
       if (ProjType == 0)
@@ -3074,10 +3129,17 @@ MRI *MRIvol2surfVSM(MRI *SrcVol, MATRIX *Rtk, MRI_SURFACE *TrgSurf,
         case SAMPLE_NEAREST:
           srcval = MRIgetVoxVal(SrcVol,icol,irow,islc,frm);
           break ;
+        case SAMPLE_CUBIC_BSPLINE:
+          MRIsampleBSpline(bspline, fcol, frow, fslc, frm, &rval);
+          srcval = rval;
+          break ;
         case SAMPLE_SINC:      /* no multi-frame */
           MRIsincSampleVolume(SrcVol, fcol, frow, fslc, 5, &rval) ;
           srcval = rval;
           break ;
+        default:
+          printf("ERROR: MRIvol2surfVSM: interpolation method %i unknown\n",InterpMethod);
+          exit(1);
         } //switch
         MRIFseq_vox(TrgVol,vtx,0,0,frm) = srcval;
         if (Gdiag_no == vtx) printf("val[%d] = %f\n", frm, srcval) ;
@@ -3085,9 +3147,15 @@ MRI *MRIvol2surfVSM(MRI *SrcVol, MATRIX *Rtk, MRI_SURFACE *TrgSurf,
     }// else
     if (SrcHitVol != NULL) MRIFseq_vox(SrcHitVol,icol,irow,islc,0)++;
   }
+#ifdef MRI2_TIMERS
+  StopChronometer( &tLoop );
+  printf( "%s: Main Loop complete in %6.3f ms (%6u %6u)\n",
+          __FUNCTION__, GetChronometerValue( &tLoop ), skipped, nhits );
+#endif
 
   MatrixFree(&ras2vox);
   free(valvect);
+  if (bspline) MRIfreeBSpline(&bspline);
 
   //printf("vol2surf_linear: nhits = %d/%d\n",nhits,TrgSurf->nvertices);
 
@@ -3320,6 +3388,88 @@ int MRIsegStats(MRI *seg, int segid, MRI *mri,int frame,
 
   return(nvoxels);
 }
+/*------------------------------------------------------------*/
+/*!
+  \fn int MRIsegStatsRobust(MRI *seg, int segid, MRI *mri,int frame,
+		      float *min, float *max, float *range,
+		      float *mean, float *std, float Pct)
+  \brief Computes stats based on the the middle 100-2*Pct values, ie,
+         it trims Pct off the ends.
+*/
+int MRIsegStatsRobust(MRI *seg, int segid, MRI *mri,int frame,
+		      float *min, float *max, float *range,
+		      float *mean, float *std, float Pct)
+{
+  int id,nvoxels,r,c,s,k,m;
+  double val, sum, sum2;
+  float *vlist;
+
+  *min = 0;
+  *max = 0;
+  *range = 0;
+  *mean = 0;
+  *std = 0;
+
+  // Count number of voxels
+  nvoxels = 0;
+  for (c=0; c < seg->width; c++) {
+    for (r=0; r < seg->height; r++)  {
+      for (s=0; s < seg->depth; s++)  {
+        id = (int) MRIgetVoxVal(seg,c,r,s,0);
+        if (id != segid) continue;
+        nvoxels++;
+      }
+    }
+  }
+  if(nvoxels == 0) return(nvoxels);
+
+  // Load voxels into an array
+  vlist = (float *) calloc(sizeof(float),nvoxels);
+  nvoxels = 0;
+  for (c=0; c < seg->width; c++) {
+    for (r=0; r < seg->height; r++)  {
+      for (s=0; s < seg->depth; s++)  {
+        id = (int) MRIgetVoxVal(seg,c,r,s,0);
+        if (id != segid) continue;
+	vlist[nvoxels] = MRIgetVoxVal(mri,c,r,s,frame);
+        nvoxels++;
+      }
+    }
+  }
+  // Sort the array
+  qsort((void *) vlist, nvoxels, sizeof(float), compare_floats);
+
+  // Compute stats excluding Pct of the values from each end
+  sum  = 0;
+  sum2 = 0;
+  m = 0;
+  //printf("Robust Indices: %d %d\n",(int)nint(Pct*nvoxels/100.0),(int)nint((100-Pct)*nvoxels/100.0));
+  for(k=0; k < nvoxels; k++){
+    if(k < Pct*nvoxels/100.0)       continue;
+    if(k > (100-Pct)*nvoxels/100.0) continue;
+    val = vlist[k];
+    if(m == 0){
+      *min = val;
+      *max = val;
+    }
+    if (*min > val) *min = val;
+    if (*max < val) *max = val;
+    sum  += val;
+    sum2 += (val*val);
+    m = m + 1;
+  }
+
+  *range = *max - *min;
+  *mean = sum/m;
+  if(m > 1)
+    *std = sqrt(((m)*(*mean)*(*mean) - 2*(*mean)*sum + sum2)/
+                (m-1));
+  else *std = 0.0;
+
+  free(vlist);
+  vlist = NULL;
+  return(m);
+}
 /*---------------------------------------------------------
   MRIsegFrameAvg() - computes the average time course withing the
   given segmentation. Returns the number of voxels in the
@@ -3368,3 +3518,93 @@ int MRIsegFrameAvg(MRI *seg, int segid, MRI *mri, double *favg)
   return(nvoxels);
 }
 
+MRI *
+MRImask_with_T2_and_aparc_aseg(MRI *mri_src, MRI *mri_dst, MRI *mri_T2, MRI *mri_aparc_aseg, float T2_thresh, int mm_from_exterior)
+{
+  int    x, y, z, nremoved, i ;
+  MRI    *mri_bright, *mri_mask , *mri_tmp = NULL;
+
+  mri_mask = MRIbinarize(mri_T2, NULL, T2_thresh, 255, 0) ;
+  mri_bright = MRIcopy(mri_mask, NULL) ;
+
+
+  if (mri_aparc_aseg)   // use T2 and aparc+aseg to remove non-brain stuff
+  {
+    MRIbinarize(mri_aparc_aseg, mri_aparc_aseg, 1, 0, 255) ;
+    MRIdilate(mri_aparc_aseg, mri_aparc_aseg) ;
+    MRInot(mri_aparc_aseg, mri_aparc_aseg) ;  // background now on, foreground off
+    GetLargestCC6(mri_aparc_aseg) ;                 // remove disconnected background components
+    MRIand(mri_mask, mri_aparc_aseg, mri_mask, 1) ;
+    MRIopenN(mri_mask, mri_mask, 3) ;   // third order open will remove thin chains of bright T2 that are in the interior
+  }
+  else  // just use T2
+  {
+    GetLargestCC6(mri_mask) ;
+  }
+
+
+  MRInot(mri_mask, mri_mask) ;   // 0 now means mask it out and 1 means retain it
+
+  for (i = nremoved = 0 ; i < mm_from_exterior ; i++)
+  {
+    mri_tmp =  MRIcopy(mri_mask, mri_tmp) ;
+    for (x = 0 ; x < mri_mask->width ;  x++)
+      for (y = 0 ; y < mri_mask->height ;  y++)
+	for (z = 0 ; z < mri_mask->depth ;  z++)
+	{
+	  if (x == Gx && y == Gy && z == Gz)
+	    DiagBreak() ;
+	  if (MRIgetVoxVal(mri_mask, x, y, z, 0) == 0)  // already in the mask
+	    continue ;
+	  if (MRIgetVoxVal(mri_aparc_aseg, x, y, z, 0) == 0)  // too close to brain
+	    continue ;
+	  if (MRIgetVoxVal(mri_T2, x, y, z, 0) >= T2_thresh)  // bright in the T2
+	  {
+	    if (MRIneighborsOff(mri_mask, x, y, z, 1) > 0)   // touching the existing mask
+	    {
+	      if (x == Gx && y == Gy && z == Gz)
+		DiagBreak() ;
+	      MRIsetVoxVal(mri_tmp, x, y, z, 0, 0) ;   // add this voxel to the mask
+	      nremoved++ ;
+	    }
+	  }
+	}
+
+    printf("%d T2-bright exterior voxels removed\n", nremoved) ;
+    MRIcopy(mri_tmp, mri_mask) ;
+  }
+
+
+  mri_dst = MRImask(mri_dst, mri_mask, mri_dst, 0, 0) ;  // if mask == 0, then set dst as 0
+  MRIfree(&mri_bright) ;  MRIfree(&mri_mask) ; MRIfree(&mri_tmp) ;
+  return(mri_dst) ;
+}
+
+/* ----------------------------------------------------------*/
+/*!
+  \fn int *MRIsegmentationList(MRI *seg, int *pListLength)
+  \brief Extracts a list of unique segmentation IDs from the volume. 
+    Includes 0.
+*/
+int *MRIsegmentationList(MRI *seg, int *pListLength)
+{
+  int c,r,s,n,nvox;
+  int *list, *voxlist;
+
+  nvox = seg->width*seg->height*seg->depth;
+  voxlist = (int *) calloc(nvox,sizeof(int));
+  n = 0;
+  for(s=0; s < seg->depth; s++){
+    for(c=0; c < seg->width; c++){
+      for(r=0; r < seg->height; r++){
+	voxlist[n] = MRIgetVoxVal(seg,c,r,s,0);
+	n++;
+      }
+    }
+  }
+  list = unqiue_int_list(voxlist, nvox, pListLength);
+  printf("MRIsegmentationList(): found %d unique segmentations\n", *pListLength);
+  if(Gdiag_no > 0) for(n=0; n<*pListLength; n++)  printf("%2d %5d\n",n,list[n]);
+  free(voxlist);
+  return(list);
+}

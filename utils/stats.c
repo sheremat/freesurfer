@@ -6,9 +6,9 @@
 /*
  * Original Authors: Bruce Fischl and Doug Greve
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/03/22 16:37:02 $
- *    $Revision: 1.34.2.1 $
+ *    $Author: fischl $
+ *    $Date: 2012/03/07 18:00:25 $
+ *    $Revision: 1.37 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -1060,10 +1060,10 @@ StatAccumulateSurfaceVolume(SV *sv_surf, SV *sv, MRI_SURFACE *mris)
         fprintf(stderr,"performing soap bubble for %d iterations...\n", niter);
         /*        MRIsoapBubbleExpand(mri_avg, mri_ctrl, mri_avg, 1) ;*/
         MRIbuildVoronoiDiagram(mri_avg, mri_ctrl, mri_avg) ;
-        MRIsoapBubble(mri_avg, mri_ctrl, mri_avg, niter) ;
+        MRIsoapBubble(mri_avg, mri_ctrl, mri_avg, niter, -1) ;
         MRIbuildVoronoiDiagram(mri_avg, mri_ctrl, mri_avg) ;
         /*        MRIsoapBubbleExpand(mri_std, mri_ctrl, mri_std, 1) ;*/
-        MRIsoapBubble(mri_std, mri_ctrl, mri_std, niter) ;
+        MRIsoapBubble(mri_std, mri_ctrl, mri_std, niter, -1) ;
       }
 
       /*
@@ -1608,3 +1608,42 @@ MATRIX *StatLoadTalairachXFM(const char *subjid, const char *xfmfile)
 
   return(Mcor2tal);
 }
+FS_STATS *
+FSstatsRead(char *fname)
+{
+  FS_STATS *stats ;
+  char     line[MAX_LINE_LEN], *cp, name[STRLEN] ;
+  FILE     *fp ;
+  int      n ;
+
+  fp = fopen(fname, "r") ;
+  if (fp == NULL)
+    ErrorReturn(NULL, (ERROR_NOFILE, "FSstatsRead(%s): could not open file", fname)) ;
+  
+
+  stats = (FS_STATS *)calloc(1, sizeof(FS_STATS)) ;
+
+  while ((cp = fgetl(line, MAX_LINE_LEN, fp)) != NULL)
+    stats->nlabels++ ;
+  rewind(fp) ;
+  stats->labels = (FS_STAT *)calloc(stats->nlabels, sizeof(FS_STAT)) ;
+  for (n = 0 ; n < stats->nlabels ; n++)
+  {
+    cp = fgetl(line, MAX_LINE_LEN, fp) ;
+    sscanf(cp, "%*d %d %d %lf %s %lf %lf %lf %lf",
+	   &stats->labels[n].label, 
+	   &stats->labels[n].nvoxels, 
+	   &stats->labels[n].volume, 
+	   name,
+	   &stats->labels[n].int_mean, 
+	   &stats->labels[n].int_std, 
+	   &stats->labels[n].int_min, 
+	   &stats->labels[n].int_max);
+    stats->labels[n].name = (char *)calloc(strlen(name)+1, sizeof(char)) ;
+    strcpy(stats->labels[n].name, name) ;
+  }
+
+  fclose(fp) ;
+  return(stats) ;
+}
+

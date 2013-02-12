@@ -15,8 +15,8 @@
  * Original Author: Bruce Fischl
  * CVS Revision Info:
  *    $Author: greve $
- *    $Date: 2011/11/08 19:10:12 $
- *    $Revision: 1.51.2.3 $
+ *    $Date: 2012/06/01 20:10:23 $
+ *    $Revision: 1.62 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -61,7 +61,7 @@ static void dump_options(FILE *fp);
 
 int main(int argc, char *argv[]) ;
 
-static char vcid[] = "$Id: mri_concat.c,v 1.51.2.3 2011/11/08 19:10:12 greve Exp $";
+static char vcid[] = "$Id: mri_concat.c,v 1.62 2012/06/01 20:10:23 greve Exp $";
 char *Progname = NULL;
 int debug = 0;
 #define NInMAX 400000
@@ -82,6 +82,9 @@ int DoVar=0;
 int DoStd=0;
 int DoMax=0;
 int DoMaxIndex=0;
+int DoMaxIndexPrune = 0;
+int DoMaxIndexAdd = 0 ;
+int MaxIndexAdd = 0 ;
 int DoMin=0;
 int DoConjunction=0;
 int DoPaired=0;
@@ -125,12 +128,13 @@ int DoPrune = 0;
 MRI *PruneMask = NULL;
 
 int DoRMS = 0; // compute root-mean-square on multi-frame input
+int DoCumSum = 0;
 
 /*--------------------------------------------------*/
 int main(int argc, char **argv)
 {
   int nargs, nthin, nframestot=0, nr=0,nc=0,ns=0, fout;
-  int r,c,s,f,outf,nframes,err,nthrep;
+  int r,c,s,f,outf,nframes,err,nthrep,AllZero;
   double v, v1, v2, vavg, vsum;
   int inputDatatype=MRI_UCHAR;
   MATRIX *Upca=NULL,*Spca=NULL;
@@ -138,7 +142,7 @@ int main(int argc, char **argv)
   char *stem;
 
   /* rkt: check for and handle version tag */
-  nargs = handle_version_option (argc, argv, vcid, "$Name: stable5 $");
+  nargs = handle_version_option (argc, argv, vcid, "$Name:  $");
   if (nargs && argc - nargs == 1)
   {
     exit (0);
@@ -446,50 +450,26 @@ int main(int argc, char **argv)
             v1 = MRIgetVoxVal(mriout,c,r,s,f);
             v2 = MRIgetVoxVal(mriout,c,r,s,f+1);
             v = 0;
-            if(DoPairedAvg)
-            {
-              v = (v1+v2)/2.0;
-            }
-            if(DoPairedSum)
-            {
-              v = (v1+v2);
-            }
-            if(DoPairedDiff)
-            {
-              v = v1-v2;  // difference
-            }
-            if(DoPairedDiffNorm)
-            {
+            if(DoPairedAvg) v = (v1+v2)/2.0;
+            if(DoPairedSum) v = (v1+v2);
+            if(DoPairedDiff) v = v1-v2;  // difference
+            if(DoPairedDiffNorm){
               v = v1-v2; // difference
               vavg = (v1+v2)/2.0;
-              if (vavg != 0.0)
-              {
-                v = v/vavg;
-              }
+              if (vavg != 0.0) v = v/vavg;
+	      else             v = 0;
             }
             if(DoPairedDiffNorm1)
             {
               v = v1-v2; // difference
-              if (v1 != 0.0)
-              {
-                v = v/v1;
-              }
-              else
-              {
-                v = 0;
-              }
+              if (v1 != 0.0) v = v/v1;
+              else           v = 0;
             }
             if(DoPairedDiffNorm2)
             {
               v = v1-v2; // difference
-              if (v2 != 0.0)
-              {
-                v = v/v2;
-              }
-              else
-              {
-                v = 0;
-              }
+              if (v2 != 0.0) v = v/v2;
+              else v = 0;
             }
             MRIsetVoxVal(mritmp,c,r,s,fout,v);
             fout++;
@@ -572,12 +552,43 @@ int main(int argc, char **argv)
     mriout = mritmp;
   }
 
-  if(DoMaxIndex)
-  {
+  if(DoMaxIndex){
     printf("Computing max index across all frames \n");
     mritmp = MRIvolMaxIndex(mriout,1,NULL,NULL);
+    if(DoMaxIndexPrune){
+      // Set to 0 any voxels that are all 0 in each input frame
+      // Note: not the same as --prune (which sets to 0 if ANY frame=0)
+      printf("Pruning max index\n");
+      for (c=0; c < nc; c++){
+	for (r=0; r < nr; r++) {
+	  for (s=0; s < ns; s++){
+	    AllZero = 1;
+	    for (f=0; f < mriout->nframes; f++){
+	      if(fabs(MRIgetVoxVal(mriout,c,r,s,f))>0){
+		AllZero = 0;
+		break;
+	      }
+	    }
+	    if(AllZero) MRIsetVoxVal(mritmp,c,r,s,0, 0);
+	  }
+	}
+      }
+    }
     MRIfree(&mriout);
     mriout = mritmp;
+    if(DoMaxIndexAdd){
+      printf("Adding %d to index\n",MaxIndexAdd);
+      // This adds a value only to the non-zero voxels
+      for (c=0; c < nc; c++){
+	for (r=0; r < nr; r++) {
+	  for (s=0; s < ns; s++){
+	    f = MRIgetVoxVal(mriout,c,r,s,0);
+	    if(f == 0) continue;
+	    MRIsetVoxVal(mriout,c,r,s,0,f+MaxIndexAdd);
+	  }
+	}
+      }
+    }
   }
 
   if(DoConjunction)
@@ -622,6 +633,11 @@ int main(int argc, char **argv)
   {
     printf("Adding %lf\n",AddVal);
     MRIaddConst(mriout, AddVal, mriout);
+  }
+
+  if(DoCumSum){
+    printf("Computing cumulative sum\n");
+    fMRIcumSum(mriout, mask, mriout);
   }
 
   if(DoSCM)
@@ -823,6 +839,23 @@ static int parse_commandline(int argc, char **argv)
     {
       DoMaxIndex = 1;
     }
+    else if (!strcasecmp(option, "--max-index-prune"))
+    {
+      DoMaxIndex = 1;
+      DoMaxIndexPrune = 1;
+    }
+    else if (!strcasecmp(option, "--max-index-add"))
+    {
+      if (nargc < 1) argnerr(option,1);
+      if(! isdigit(pargv[0][0]) && pargv[0][0] != '-' && pargv[0][0] != '+'){
+        printf("ERROR: value passed to the --max-index-add flag must be a number\n");
+        printf("       If you want to add two images, use --sum or fscalc\n");
+        exit(1);
+      }
+      sscanf(pargv[0],"%d",&MaxIndexAdd);
+      DoMaxIndexAdd = 1;
+      nargsused = 1;
+    }
     else if (!strcasecmp(option, "--min"))
     {
       DoMin = 1;
@@ -897,6 +930,7 @@ static int parse_commandline(int argc, char **argv)
     {
       DoCombine = 1;
     }
+    else if (!strcasecmp(option, "--cumsum")) DoCumSum = 1;
     else if (!strcasecmp(option, "--rms"))
     {
       DoRMS = 1;
@@ -1108,6 +1142,8 @@ static void print_usage(void)
   printf("   --std  : compute std  of concatenated volumes\n");
   printf("   --max  : compute max  of concatenated volumes\n");
   printf("   --max-index  : compute index of max of concatenated volumes (1-based)\n");
+  printf("   --max-index-prune  : max index setting to 0 any voxel where all frames are 0 (not the same as --prune)\n");
+  printf("   --max-index-add val  : add val to non-zero max indices)\n");
   printf("   --min  : compute min of concatenated volumes\n");
   printf("   --rep N : replicate N times (over frame)\n");
   printf("   --conjunct  : compute voxel-wise conjunction concatenated volumes\n");

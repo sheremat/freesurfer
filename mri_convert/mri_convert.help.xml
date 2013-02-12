@@ -59,6 +59,8 @@ Supply the orientation information in the form of an orientation string  (ostrin
       <explanation>print statistics on output volume</explanation>
       <argument>-im, --in_matrix</argument>
       <argument>-om, --out_matrix</argument>
+      <argument>--upsample N &lt;size&gt;</argument>
+      <explanation>Reduce voxel size by a factor of N in all dimensions</explanation>
       <argument>-iis, --in_i_size &lt;size&gt;</argument>
       <argument>-ijs, --in_j_size &lt;size&gt;</argument>
       <argument>-iks, --in_k_size &lt;size&gt;</argument>
@@ -70,6 +72,7 @@ Supply the orientation information in the form of an orientation string  (ostrin
       <argument>--in_orientation orientation-string</argument>
       <explanation>see SPECIFYING THE ORIENTATION</explanation>
       <argument>-ic, --in_center &lt;R coordinate&gt; &lt;A coordinate&gt; &lt;S coordinate&gt;</argument>
+      <argument>-dic, --delta_in_center &lt;dR coordinate&gt; &lt;dA coordinate&gt; &lt;dS coordinate&gt;</argument>
       <argument>--sphinx</argument>
       <explanation>change orientation info to sphinx</explanation>
       <argument>-oni, -oic, --out_i_count &lt;count&gt;</argument>
@@ -77,6 +80,8 @@ Supply the orientation information in the form of an orientation string  (ostrin
       <argument>-onk, -okc, --out_k_count &lt;count&gt;</argument>
       <argument>-vs, --voxsize &lt;size_x&gt; &lt;size_y&gt; &lt;size_z&gt;</argument>
       <explanation>specify the size (mm) - useful for upsampling or downsampling</explanation>
+      <argument>-ds, --downsample &lt;ds_x&gt; &lt;ds_y&gt; &lt;ds_z&gt;</argument>
+      <explanation>specify the downsampling or upsampling factor</explanation>
       <argument>-ois, --out_i_size &lt;size&gt;</argument>
       <argument>-ojs, --out_j_size &lt;size&gt;</argument>
       <argument>-oks, --out_k_size &lt;size&gt;</argument>
@@ -92,7 +97,7 @@ Supply the orientation information in the form of an orientation string  (ostrin
       by asegstats2table or aparcstats2table</explanation>
       <argument>--out_stats_table</argument>
       <explanation>output data is a stats table (use --like to pass template table for measure, columns and rows header)</explanation>
-      <argument>-rt, --resample_type &lt;interpolate|weighted|nearest|sinc|cubic&gt;</argument>
+      <argument>-rt, --resample_type &lt;interpolate|weighted|nearest|cubic&gt;</argument>
       <explanation>default is interpolate</explanation>
       <argument>--no_scale flag &lt;-ns&gt;</argument>
       <explanation>1 = dont rescale values for COR</explanation>
@@ -108,7 +113,6 @@ Supply the orientation information in the form of an orientation string  (ostrin
       <explanation>angle in radians </explanation>
       <argument>--autoalign mtxfile </argument>
       <explanation>text file with autoalign matrix </explanation>
-      <argument>--unwarp_gradient_nonlinearity &lt;sonata|allegra|GE&gt; &lt;fullUnwarp|through-plane&gt; &lt;JacobianCorrection|noJacobianCorrection&gt; &lt;linear|sinc&gt; &lt;sincInterpHW&gt;</argument>
       <intro>APPLYING TRANSFORMS (INCLUDING TALAIRACH) </intro>
       <argument>--apply_transform xfmfile (-T or -at) </argument>
       <explanation>apply tranform given by xfm or m3z files </explanation> 
@@ -227,6 +231,12 @@ if the input/output has extension .nii.gz, then compressed is used</explanation>
       <argument>--split </argument>
       <explanation>split output frames into separate output files.</explanation>
       <explanation>Example: mri_convert a.nii b.nii --split will create b0000.nii b0001.nii b0002.nii ... </explanation>
+      <argument>--erode-seg Nerodes</argument>
+      <explanation>Erode segmentation boundaries Nerode times (based on 6 nearest neighbors)</explanation>
+      <argument>--dil-seg Ndilations</argument>
+      <explanation>Dilate segmentation boundaries Ndilate times (based on 6 nearest neighbors) to fill seg=0 voxels</explanation>
+      <argument>--dil-seg-mask mask</argument>
+      <explanation>Dilate segmentation boundaries to fill mask</explanation>
       <argument>-f,  --frame frameno</argument>
       <explanation>keep only 0-based frame number</explanation> 
       <argument>--mid-frame</argument>

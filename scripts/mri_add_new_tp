@@ -9,8 +9,8 @@
 # Original Author: Martin Reuter
 # CVS Revision Info:
 #    $Author: mreuter $
-#    $Date: 2011/05/04 18:03:35 $
-#    $Revision: 1.7.2.1 $
+#    $Date: 2011/05/04 18:01:39 $
+#    $Revision: 1.8 $
 #
 # Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
 #
@@ -25,7 +25,7 @@
 #
 
 
-set VERSION = '$Id: mri_add_new_tp,v 1.7.2.1 2011/05/04 18:03:35 mreuter Exp $';
+set VERSION = '$Id: mri_add_new_tp,v 1.8 2011/05/04 18:01:39 mreuter Exp $';
 
 if ($#argv < 2) then
   echo

@@ -7,8 +7,8 @@
  * 
  * CVS Revision Info:
  *    $Author: nicks $
- *    $Date: 2012/01/04 03:17:25 $
- *    $Revision: 1.3.6.1 $
+ *    $Date: 2012/01/04 03:16:15 $
+ *    $Revision: 1.4 $
  *
  * Copyright 1999 - 2011
  * Washington University, Mallinckrodt Institute of Radiology.
@@ -33,7 +33,7 @@
 
 #define MAXL		256
 
-static char rcsid[] = "$Id: endianio.c,v 1.3.6.1 2012/01/04 03:17:25 nicks Exp $";
+static char rcsid[] = "$Id: endianio.c,v 1.4 2012/01/04 03:16:15 nicks Exp $";
 void endianio_rcs (void) {printf ("%s\n", rcsid);}
 
 void swab2 (char *a) {

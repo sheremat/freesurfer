@@ -28,7 +28,9 @@ MRISUBDIRS=\
 	mkxsubjreg \
 	rbftest \
 	mri_interpolate \
+	mri_elastic_energy \
 	mri_jacobian \
+	mri_update_gca \
 	mri_compile_edits \
 	mri_compute_volume_fractions \
 	mri_label_accuracy \
@@ -43,6 +45,10 @@ MRISUBDIRS=\
 	mri_binarize \
 	mri_build_priors \
 	mri_ca_label \
+	mri_rf_label \
+	mri_rf_train \
+	mri_rf_long_label \
+	mri_rf_long_train \
 	mri_aseg_edit_train \
 	mri_aseg_edit_reclassify \
 	mri_ca_normalize \
@@ -56,6 +62,7 @@ MRISUBDIRS=\
 	mri_cnr \
 	mri_compute_overlap \
 	mri_concat \
+	mri_concatenate_gcam \
 	mri_convert \
 	mri_convert_mdh \
 	mri_copy_values \
@@ -73,6 +80,7 @@ MRISUBDIRS=\
 	mri_extract_label \
 	mri_fieldsign \
 	mri_fill \
+	mri_fit_bias \
 	mri_fwhm \
 	mri_gca_ambiguous \
 	mri_head \
@@ -81,11 +89,13 @@ MRISUBDIRS=\
 	histo_fix_topology \
 	mri_histo_eq \
 	mri_compute_structure_transforms \
+	mri_ibmc \
 	mri_info \
 	mri_and \
 	mri_hausdorff_dist \
 	mri_histo_normalize \
 	mri_fuse_segmentations \
+	mri_fuse_intensity_images \
 	mri_simulate_atrophy \
 	mri_joint_density \
 	mri_label_histo \
@@ -103,11 +113,12 @@ MRISUBDIRS=\
 	mri_mcsim \
 	mri_mc \
 	mri_matrix_multiply \
-	mri_mi_nl_align \
 	mri_modify \
 	mri_multispectral_segment \
+	mri_multiscale_segment \
 	mri_nlfilter \
 	mri_normalize \
+	mri_otl \
 	mri_partial_ribbon \
 	mri_paint \
 	mri_parselabel \
@@ -123,6 +134,7 @@ MRISUBDIRS=\
 	mri_robust_register \
 	mri_seg_diff \
 	mri_segment \
+	mri_segment_tumor \
 	mri_seghead \
 	mri_surfacemask \
 	mri_strip_subject_info \
@@ -135,6 +147,7 @@ MRISUBDIRS=\
 	mri_distance_transform \
 	mri_transform \
 	mri_train \
+	mri_classify \
 	mri_twoclass \
 	mri_volcluster \
 	mri_voldiff \
@@ -145,6 +158,7 @@ MRISUBDIRS=\
 	mri_segstats \
 	mri_stats2seg \
 	mri_vol2surf \
+	mri_warp_convert \
 	mri_watershed \
 	mri_wmfilter \
 	mri_xvolavg \
@@ -170,7 +184,10 @@ MRISUBDIRS=\
 	mri_compute_change_map \
 	mri_apply_inu_correction \
 	talairach_afd \
-	talairach_avi
+	talairach_avi \
+	template
+
+#	mri_edit_seg_with_ribbons
 
 MRISSUBDIRS=\
 	label_area \
@@ -179,7 +196,9 @@ MRISSUBDIRS=\
 	label2flat \
 	spherical_stats \
 	tridec \
+	mris_segmentation_stats \
 	mris_register_to_volume \
+	mris_interpolate_warp \
 	mris_parcellate_connectivity \
 	mris_map_cuts \
 	mris_hausdorff_dist \
@@ -190,11 +209,15 @@ MRISSUBDIRS=\
 	mris_calc \
 	mris_shrinkwrap \
 	mris_density \
+	mris_rf_label \
+	mris_rf_train \
 	mris_fbirn_annot \
 	mris_fill \
 	mris_add_template \
 	mris_anatomical_stats \
+	mris_transmantle_dysplasia_paths \
 	mris_annot_to_segmentation \
+	mris_apply_reg \
 	mris_aseg_distance \
 	mris_average_curvature \
 	mris_ca_label \
@@ -229,6 +252,7 @@ MRISSUBDIRS=\
 	mris_label2annot \
 	mris_make_average_surface \
 	mris_make_surfaces \
+	mris_make_map_surfaces \
 	mris_longitudinal_surfaces \
 	mris_make_template \
 	mris_morph_stats \
@@ -244,11 +268,13 @@ MRISSUBDIRS=\
 	mris_diff \
 	mris_distance_to_label \
 	mris_register \
+	mris_left_right_register \
 	mris_congeal \
 	mris_resample \
 	mris_sample_label \
 	mris_sample_parc \
 	mris_segment_vals \
+	mris_segment \
 	mris_seg2annot \
 	mris_smooth \
 	mris_make_face_parcellation \
@@ -269,9 +295,12 @@ MRISSUBDIRS=\
 	mris_w_to_curv \
 	mris_volmask \
 	mris_volume \
+	mris_warp \
 	mris_thickness_diff \
 	mris_ms_surface_CNR \
-	mris_surface_stats
+	mris_mesh_subdivide \
+	mris_surface_stats \
+	mris_compute_volume_fractions
 
 FSGDF=\
 	fsgdf \
@@ -287,6 +316,7 @@ STATSDIRS=\
 
 MISCDIRS=\
 	GEMS \
+	histo_register \
 	histo_compute_joint_density \
 	histo_register_block \
 	regdat2xfm \
@@ -295,10 +325,12 @@ MISCDIRS=\
 	test_makevol \
 	images \
 	dummy \
+	dummy_qt \
 	fem_elastic \
 	hiam_make_surfaces\
 	hiam_make_template\
-	hiam_register
+	hiam_register \
+	gradient_nonlin_unwarp
 
 # ordering is important here for proper 'make check' and 'make distcheck' function
 SUBDIRS=\
@@ -321,6 +353,7 @@ SUBDIRS=\
 	itkio \
 	itkutils \
 	tetgen \
+  lineprof \
 	$(FSGDF) \
 	connectgraph \
 	qdecproject \
@@ -369,8 +402,11 @@ install-data-hook:
 		fi; \
 	fi;
 	if test ! "x$(AFNIDIR)" = "x" ; then \
-		if test -e $(AFNIDIR) ; then \
+		if test -e $(AFNIDIR)/bin/3dvolreg ; then \
 			cp -f $(AFNIDIR)/bin/3dvolreg $(DESTDIR)$(bindir)/3dvolreg.afni ; \
+		fi; \
+		if test -e $(AFNIDIR)/3dvolreg ; then \
+			cp -f $(AFNIDIR)/3dvolreg $(DESTDIR)$(bindir)/3dvolreg.afni ; \
 		fi; \
 	fi;
 	if test ! "x$(TCL_DIR)" = "x" ; then \
@@ -443,5 +479,5 @@ distcleancheck:
 # Our release target. Include files to be excluded here. They will be
 # found and removed after 'make install' is run during the 'make
 # release' target.
-EXCLUDE_FILES=CVS core
+EXCLUDE_FILES=CVS
 include $(top_srcdir)/Makefile.extra

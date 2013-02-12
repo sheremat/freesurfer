@@ -8,9 +8,9 @@
 /*
  * Original Author: Rudolph Pienaar / Christian Haselgrove
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.4 $
+ *    $Author: rudolph $
+ *    $Date: 2012/07/05 21:21:28 $
+ *    $Revision: 1.7 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -30,6 +30,9 @@
 
 #include "c_surface.h"
 #include "c_vertex.h"
+
+#include "C_mpmProg.h"
+#include "asynch.h"
 
 #include <sstream>
 
@@ -52,11 +55,12 @@ label_ply_do(
 
     // Should any cost values remaining in the surface be zeroed? Yes.
 
-    bool b_origHistoryFlag          = ast_env.b_costHistoryPreserve;
-    bool b_surfaceCostVoid          = false;
-    int  i                          = 0;
-    int  j                          = 0;
-    ast_env.b_costHistoryPreserve   = true;
+    bool        b_origHistoryFlag       = ast_env.b_costHistoryPreserve;
+    bool        b_surfaceCostVoid       = false;
+    int         i                       = 0;
+    int         j                       = 0;
+    float       f_plyDepth              = s_env_plyDepth_get(ast_env);
+    ast_env.b_costHistoryPreserve       = true;
 
     //s_env_costFctSet(&ast_env, costFunc_unityReturn, e_unity);
 
@@ -65,7 +69,7 @@ label_ply_do(
         b_surfaceCostVoid  = !j++;
         ast_env.startVertex = i;
         ast_env.endVertex = i;
-        dijkstra(ast_env, ast_env.plyDepth, b_surfaceCostVoid);
+        dijkstra(ast_env, f_plyDepth, b_surfaceCostVoid);
         }
     }
     ast_env.b_costHistoryPreserve = b_origHistoryFlag;
@@ -231,79 +235,79 @@ label_workingSurface_loadFrom(
     //
 
     string      str_labelFileName;
-    MRIS*       pMS_curvature;
+    MRIS*       pMS_primary;
 
     bool        b_clearWholeSurface = true;
     surface_ripClear(st_env, b_clearWholeSurface);
 
     str_labelFileName   = st_env.str_workingDir + st_env.str_labelFileName;
-    pMS_curvature       = st_env.pMS_curvature;
+    pMS_primary         = st_env.pMS_primary;
     ULOUT(str_labelFileName);
-    label_coreLoad(pMS_curvature, str_labelFileName, vertex_labelMark, apv_marker);
+    label_coreLoad(pMS_primary, str_labelFileName, vertex_labelMark, apv_marker);
     nULOUT("\t\t\t\t[ ok ]");
 }
 
 void
 label_coreSave(
-  MRIS*   apmris,
-  string   astr_fileName,
-  bool   (*vertex_satisfyTestCondition)
-  (VERTEX* apvertex,
-   void*  apv_void),
-  void*   apv_fromCaller
+        MRIS*                   apmris,
+        string                  astr_fileName,
+        bool   (*vertex_satisfyTestCondition)
+                    (VERTEX* apvertex,
+        void*  apv_void),
+        void*   apv_fromCaller
 ) {
-  //
-  // ARGS
-  // amris    in   surface on which to
-  //        save the label
-  // astr_fileName  in   filename to contain the
-  //        saved label
-  //
-  // DESCRIPTION
-  // Saves a label file onto the passed surface
-  //
-  // POSTCONDITIONS
-  // o Label file is written to disk.
-  //
-  // HISTORY
-  // 07 February 2005
-  // o Split from "label_save()".
-  //
+      //
+      // ARGS
+      // amris              in              surface to examine for label
+      //                                    "rips"
+      // astr_fileName      in              filename to contain the
+      //                                    saved label
+      //
+      // DESCRIPTION
+      // Saves a label file onto the passed surface
+      //
+      // POSTCONDITIONS
+      // o Label file is written to disk.
+      //
+      // HISTORY
+      // 07 February 2005
+      // o Split from "label_save()".
+      //
 
-  LABEL*  pLBL;
-  VERTEX*  pvertex;
-  int   n = 0;
-  int   i;
+      LABEL*        pLBL;
+      VERTEX*       pvertex;
+      int           n = 0;
+      int           i;
 
-  for (i = 0;i < apmris->nvertices;i++) {
-// if(apmris->vertices[i].ripflag == TRUE)
-    pvertex = &apmris->vertices[i];
-    if (vertex_satisfyTestCondition(pvertex, apv_fromCaller))
-      n++;
-  }
-  pLBL = LabelAlloc(n, (char*)"", (char*) (astr_fileName).c_str());
-  if (pLBL == NULL)
-    error_exit("allocating a pLBL structure", "some error occurred", 1);
+      for (i = 0;i < apmris->nvertices;i++) {
+    // if(apmris->vertices[i].ripflag == TRUE)
+        pvertex = &apmris->vertices[i];
+        if (vertex_satisfyTestCondition(pvertex, apv_fromCaller))
+          n++;
+      }
+      pLBL = LabelAlloc(n, (char*)"", (char*) (astr_fileName).c_str());
+      if (pLBL == NULL)
+        error_exit("allocating a pLBL structure", "some error occurred", 1);
 
-  for (i = 0;i < apmris->nvertices;i++) {
-    pvertex = &apmris->vertices[i];
-    if (vertex_satisfyTestCondition(pvertex, apv_fromCaller)) {
-      pLBL->lv[pLBL->n_points].vno = i;
-      pLBL->lv[pLBL->n_points].x = apmris->vertices[i].x;
-      pLBL->lv[pLBL->n_points].y = apmris->vertices[i].y;
-      pLBL->lv[pLBL->n_points].z = apmris->vertices[i].z;
-      pLBL->n_points++;
-    }
-  }
-  LabelWrite(pLBL, (char*) (astr_fileName).c_str());
-  LabelFree(&pLBL);
+      for (i = 0;i < apmris->nvertices;i++) {
+        pvertex = &apmris->vertices[i];
+        if (vertex_satisfyTestCondition(pvertex, apv_fromCaller)) {
+          pLBL->lv[pLBL->n_points].vno = i;
+          pLBL->lv[pLBL->n_points].x = apmris->vertices[i].x;
+          pLBL->lv[pLBL->n_points].y = apmris->vertices[i].y;
+          pLBL->lv[pLBL->n_points].z = apmris->vertices[i].z;
+          pLBL->n_points++;
+        }
+      }
+      LabelWrite(pLBL, (char*) (astr_fileName).c_str());
+      LabelFree(&pLBL);
 }
 
 void
 label_ply_save(
-  s_env&  st_env,
-  string  astr_filePrefix,
-  bool  b_staggered
+        s_env&        st_env,
+        string        astr_filePrefix,
+        bool          b_staggered
 ) {
   //
   // PRECONDITIONS
@@ -311,40 +315,47 @@ label_ply_save(
   //
   // POSTCONDITIONS
   // o A series of label files are saved to the current working directory.
-  //   These are labelled <astr_filePrefix>.<N>.label where N = 1... plyDepth
-  //   and denote a label containing vertices that are N nodes distant from
-  //   a reference label curve.
+  //   These are labelled <astr_filePrefix>.<N>.label where
+  //   N = [1... <plyDepth>] and denote a label containing vertices that
+  //   are less than <N> cost function evaluations distant from a
+  //   reference label curve.
   //
 
-  int   d   = 0;
-  int   start    = (int) st_env.plyDepth;
-  string  str_labelFileName;
-  MRIS*  pMS_surface;
-  stringstream sout("");
-  float  f_plyDepth;
-  float*  pf_plyDepth;
-  void*  pv_fromCaller;
+  string                str_labelFileName;
+  MRIS*                 pMS_surface;
+  stringstream          sout("");
+
+  float                 f_plyStart;
+  float                 f_plyIncrement;
+  float                 f_plyDepth;
+  float*                pf_plyDepth;
+  void*                 pv_fromCaller;
 
   pMS_surface  = st_env.pMS_active;
 
+  f_plyIncrement        = s_env_plyIncrement_get(st_env);
+  f_plyDepth            = s_env_plyDepth_get(st_env);
+  f_plyStart            = f_plyDepth;
   if (b_staggered)
-    start = 1;
+    f_plyStart = 0.0;
 
-  for (d=start; d<=st_env.plyDepth; d++) {
-    f_plyDepth = (float) d;
-    pf_plyDepth = &f_plyDepth;
+  while(f_plyStart <= f_plyDepth) {
+    pf_plyDepth = &f_plyStart;
     pv_fromCaller = (void*) pf_plyDepth;
-    sout << st_env.str_workingDir + astr_filePrefix << d << ".label";
+    sout << st_env.str_workingDir + astr_filePrefix;
+    if (b_staggered) sout << "-ply" << f_plyStart;
+    sout << ".label";
     ULOUT(sout.str());
     label_coreSave(pMS_surface, sout.str(),
                    vertex_valLTE, pv_fromCaller);
     nULOUT("\t\t\t\t\t\t\t[ ok ]\n");
     sout.str("");
+    f_plyStart += f_plyIncrement;
   }
 }
 
 void
-label_auxSurface_saveTo(
+label_secondarySurface_saveTo(
     s_env&      st_env,
     bool        (*vertex_satisfyTestCondition)
     (VERTEX*    pvertex,
@@ -366,11 +377,11 @@ label_auxSurface_saveTo(
     //
 
     string        str_labelFileName;
-    MRIS*         pMS_auxSurface;
+    MRIS*         pMS_secondarySurface;
 
     str_labelFileName   = st_env.str_workingDir + st_env.str_labelFileNameOS;
-    pMS_auxSurface      = st_env.pMS_auxSurface;
-    label_coreSave(pMS_auxSurface, str_labelFileName,
+    pMS_secondarySurface= st_env.pMS_secondary;
+    label_coreSave(pMS_secondarySurface, str_labelFileName,
                  vertex_satisfyTestCondition, apv_fromCaller);
 }
 
@@ -397,11 +408,11 @@ label_workingSurface_saveTo(
     //
 
     string      str_labelFileName;
-    MRIS*       pMS_curvature;
+    MRIS*       pMS_primary;
 
     str_labelFileName   = st_env.str_workingDir + st_env.str_labelFileName;
-    pMS_curvature       = st_env.pMS_curvature;
-    label_coreSave(pMS_curvature, str_labelFileName,
+    pMS_primary         = st_env.pMS_primary;
+    label_coreSave(pMS_primary, str_labelFileName,
                  vertex_satisfyTestCondition, apv_fromCaller);
 }
 

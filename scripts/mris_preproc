@@ -10,9 +10,9 @@
 #
 # Original Author: Doug Greve
 # CVS Revision Info:
-#    $Author: greve $
-#    $Date: 2011/08/26 20:20:40 $
-#    $Revision: 1.59.2.3 $
+#    $Author: mreuter $
+#    $Date: 2012/12/06 16:06:17 $
+#    $Revision: 1.66 $
 #
 # Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
 #
@@ -29,7 +29,7 @@
 #
 setenv FIX_VERTEX_AREA
 
-set VERSION = '$Id: mris_preproc,v 1.59.2.3 2011/08/26 20:20:40 greve Exp $';
+set VERSION = '$Id: mris_preproc,v 1.66 2012/12/06 16:06:17 mreuter Exp $';
 
 set PrintHelp = 0;
 set subjlist = ();
@@ -75,6 +75,7 @@ set MeasIn  = 0;
 set outdir = ();
 set SmoothCortexOnly = 0; # At some point, this should be the default
 set DoXHemi = 0;
+set DoXHemiOnly = 0; # do not include the non-xhemi
 set DualHemi = 0;
 set subjlistfile = ();
 set fsgdf = ();
@@ -397,6 +398,28 @@ while( $#argv != 0 )
       set subjlist = ($subjlist $sl);
       breaksw
 
+    case "--qdec-long":
+      if ( $#argv == 0) goto arg1err;
+      set fsgdf = $argv[1]; shift;
+      if(! -e $fsgdf) then
+        echo "ERROR: cannot find $fsgdf";
+        exit 1;
+      endif
+      set sl = `cat $fsgdf | awk '{if ($1 != "fsid" && substr($1,0,1) != "#") printf("%s.long.%s\n", $1, $2)}'`;
+      set subjlist = ($subjlist $sl);
+      breaksw
+
+    case "--qdec":
+      if ( $#argv == 0) goto arg1err;
+      set fsgdf = $argv[1]; shift;
+      if(! -e $fsgdf) then
+        echo "ERROR: cannot find $fsgdf";
+        exit 1;
+      endif
+      set sl = `cat $fsgdf | awk '{if ($1 != "fsid" && substr($1,0,1) != "#") print $1}'`;
+      set subjlist = ($subjlist $sl);
+      breaksw
+
     case "--meas":
       if($#argv < 1) goto arg1err;
       set meas = $argv[1]; shift;
@@ -419,6 +442,13 @@ while( $#argv != 0 )
       set sval = area;
       set srcsurf = 1;
       set jac = 1;
+      breaksw
+
+    case "--tal-xyz":
+      if($#argv < 1) goto arg1err;
+      set svalsurf = $argv[1]; shift;
+      set sval = tal-xyz
+      set srcsurf = 1;
       breaksw
 
     case "--jac":
@@ -653,6 +683,11 @@ while( $#argv != 0 )
 
     case "--xhemi":
       set DoXHemi = 1;
+      breaksw
+
+    case "--xhemi-only":
+      set DoXHemi = 1;
+      set DoXHemiOnly = 1;
       breaksw
 
     case "--paired-diff-norm":
@@ -898,8 +933,12 @@ endif
 if($DoXHemi) then
   set tmplist = ();
   foreach subj ($subjlist)
-    if($srchemi == lh) set tmplist = ($tmplist $subj $subj/xhemi)
-    if($srchemi == rh) set tmplist = ($tmplist $subj/xhemi $subj)
+    if($DoXHemiOnly) then
+      set tmplist = ($tmplist $subj/xhemi)
+    else
+      if($srchemi == lh) set tmplist = ($tmplist $subj $subj/xhemi)
+      if($srchemi == rh) set tmplist = ($tmplist $subj/xhemi $subj)
+    endif
   end
   set subjlist = ($tmplist);
 endif
@@ -987,10 +1026,13 @@ usage_exit:
   echo "  --s subj1 <--s subj2 ... --s subjN>"
   echo "  --fsgd fsgdfile"
   echo "  --f subjectlistfile"
+  echo "  --qdec qdectable"
+  echo "  --qdec-long longitudinal qdectable"
   echo ""
   echo "  --is surfmeasfile <--is surfmeasfile> "
   echo "  --srcfmt fmt : source format"
   echo "  --surfdir dirname    : alternative directory (instead of surf)"
+  echo "  --tal-xyz surfname : output xyz in mni305 for each subject"
   echo ""
   echo "  --iv volmeasfile reg <--iv volmeasfile reg>"
   echo "  --projfrac frac : projection fraction for vol2surf"
@@ -1082,10 +1124,11 @@ Use hemi for source and target surfaces. hemi can be lh or rh.
 Use subject/surf/hemi.surfmeasure as input. For use with --s, --fsgd,
 or --f.  Implies --srcfmt curv.
 
---area surfname
+--tal-xyz surfname
 
-Extract vertex area from subject/surf/hemi.surfname to use as input. For use
-with --s, --fsgd, or --f.  surfname does not include hemi. Eg, white, pial.
+Extract vertex mni305 xyz from subject/surf/hemi.surfname to use as
+input. For use with --s, --fsgd, or --f.  surfname does not include
+hemi. Eg, white, pial. Creates 3 frames for each input subject.
 
 --s subjN
 
@@ -1104,6 +1147,18 @@ for more info. For use with --meas.
 
 List all subjects separated by white space in subjlistfile. This is just an
 alternative to using an fsgd file. For use with --meas.
+
+--qdec qdectable
+
+Specify list of subjects via qdec table file. It is assumed that the first column
+is the "fsid" (subject id). Rows starting with "#" are skipped.
+
+--qdec-long qdectable
+
+Specify list of subjects via longitudinal qdec table file. It is assumed that the
+first column is the "fsid" (subject_tp id) and the second is "fsid-base" that
+specifies the base name (fixed per subject). Internally longitudinal subject ids 
+are created as <fsid>.long.<fsid-base>. Rows starting with "#" are skipped. 
 
 --is surfmeasfile
 

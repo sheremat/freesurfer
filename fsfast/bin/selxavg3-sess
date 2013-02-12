@@ -6,8 +6,8 @@
 # Original Author: Doug Greve
 # CVS Revision Info:
 #    $Author: greve $
-#    $Date: 2011/12/09 20:06:47 $
-#    $Revision: 1.57.2.1 $
+#    $Date: 2011/12/09 20:03:03 $
+#    $Revision: 1.60 $
 #
 # Copyright (C) 2002-2007,
 # The General Hospital Corporation (Boston, MA). 
@@ -23,7 +23,7 @@
 #
 
 
-set VERSION = '$Id: selxavg3-sess,v 1.57.2.1 2011/12/09 20:06:47 greve Exp $'
+set VERSION = '$Id: selxavg3-sess,v 1.60 2011/12/09 20:03:03 greve Exp $'
 
 set inputargs = ($argv);
 set DateStr = "`date '+%y%m%d%H%M%S'`"

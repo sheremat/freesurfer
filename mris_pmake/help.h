@@ -6,9 +6,9 @@
 /*
  * Original Author: Rudolph Pienaar / Christian Haselgrove
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.6 $
+ *    $Author: rudolph $
+ *    $Date: 2012/10/19 19:01:35 $
+ *    $Revision: 1.9 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -44,7 +44,7 @@ extern  "C" {
 #ifdef __cplusplus
 }
 #endif
-
+#include <unistd.h>
 #include <string>
 using namespace std;
 
@@ -56,14 +56,16 @@ static struct option const longopts[] = {
     {"version",         no_argument,            NULL, 'v'},
     {"subject",         required_argument,      NULL, 'S'},
     {"hemi",            required_argument,      NULL, 'h'},
-    {"surface0",        required_argument,      NULL, 's'},
+    {"surface",         required_argument,      NULL, 's'},
     {"surface1",        required_argument,      NULL, 't'},
-    {"curv0",           required_argument,      NULL, 'c'},
+    {"curv",            required_argument,      NULL, 'c'},
     {"curv1",           required_argument,      NULL, 'd'},
     {"mpmProg",         required_argument,      NULL, 'm'},
     {"mpmArgs",         required_argument,      NULL, 'M'},
+    {"port",            required_argument,      NULL, 'p'},
     {"useAbsCurvs",     no_argument,            NULL, 'a'},
     {"mpmOverlay",	required_argument,	NULL, 'O'},
+    {"mpmOverlayArgs",	required_argument,	NULL, 'V'},
     {NULL, 0, NULL, 0}
 };
 

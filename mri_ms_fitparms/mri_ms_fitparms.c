@@ -20,8 +20,8 @@
  * Original Author: Bruce Fischl
  * CVS Revision Info:
  *    $Author: nicks $
- *    $Date: 2011/05/16 17:53:06 $
- *    $Revision: 1.68.2.1 $
+ *    $Date: 2011/05/16 17:49:25 $
+ *    $Revision: 1.71 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -219,15 +219,15 @@ main(int argc, char *argv[])
 
   make_cmd_version_string
   (argc, argv,
-   "$Id: mri_ms_fitparms.c,v 1.68.2.1 2011/05/16 17:53:06 nicks Exp $",
-   "$Name: stable5 $",
+   "$Id: mri_ms_fitparms.c,v 1.71 2011/05/16 17:49:25 nicks Exp $",
+   "$Name:  $",
    cmdline);
 
   /* rkt: check for and handle version tag */
   nargs = handle_version_option (
             argc, argv,
-            "$Id: mri_ms_fitparms.c,v 1.68.2.1 2011/05/16 17:53:06 nicks Exp $",
-            "$Name: stable5 $");
+            "$Id: mri_ms_fitparms.c,v 1.71 2011/05/16 17:49:25 nicks Exp $",
+            "$Name:  $");
   if (nargs && argc - nargs == 1)
   {
     exit (0);

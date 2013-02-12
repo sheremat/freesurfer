@@ -7,9 +7,9 @@
 /*
  * Original Author: REPLACE_WITH_FULL_NAME_OF_CREATING_AUTHOR 
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/03/02 00:04:15 $
- *    $Revision: 1.25 $
+ *    $Author: greve $
+ *    $Date: 2012/10/31 21:43:57 $
+ *    $Revision: 1.29 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -174,6 +174,10 @@ the same with --to-fwhm.
 Synthesize input with white gaussian noise with the given number of frames.
 Implies --synth.
 
+--tr TRms
+
+Set TR (generally not too useful)
+
 EXAMPLES:
 
 1. Measure the fwhm of an input data set, compute mask automatically by
@@ -251,7 +255,7 @@ static void print_version(void) ;
 static void dump_options(FILE *fp);
 int main(int argc, char *argv[]) ;
 
-static char vcid[] = "$Id: mri_fwhm.c,v 1.25 2011/03/02 00:04:15 nicks Exp $";
+static char vcid[] = "$Id: mri_fwhm.c,v 1.29 2012/10/31 21:43:57 greve Exp $";
 char *Progname = NULL;
 char *cmdline, cwd[2000];
 int debug=0;
@@ -300,10 +304,14 @@ double automaskthresh = .1;
 int nerode = 0;
 int SmoothOnly = 0;
 int nframesmin = 10;
+int DoSqr = 0; // take square of input before smoothing
 
 char *sum2file = NULL;
 
 int DoAR2;
+
+double TR=0.0;
+int SetTR=0;
 
 /*---------------------------------------------------------------*/
 int main(int argc, char *argv[]) {
@@ -317,7 +325,7 @@ int main(int argc, char *argv[]) {
   sprintf(tmpstr, "S%sER%sRONT%sOR", "URF", "_F", "DO") ;
   setenv(tmpstr,"1",0);
 
-  nargs = handle_version_option (argc, argv, vcid, "$Name: stable5 $");
+  nargs = handle_version_option (argc, argv, vcid, "$Name:  $");
   if (nargs && argc - nargs == 1) exit (0);
   argc -= nargs;
   cmdline = argv2cmdline(argc,argv);
@@ -340,6 +348,10 @@ int main(int argc, char *argv[]) {
   // ------------- load or synthesize input ---------------------
   InVals = MRIreadType(inpath,InValsType);
   if(InVals == NULL) exit(1);
+  if(SetTR){
+    printf("Setting TR to %g ms\n",TR);
+    InVals->tr = TR;
+  }
   if((nframes < 0 && synth) || !synth) nframes = InVals->nframes;
   if(nframes < nframesmin && !SmoothOnly && !sum2file) {
     printf("ERROR: nframes = %d, need at least %d\n",
@@ -362,11 +374,20 @@ int main(int argc, char *argv[]) {
   voxelvolume = InVals->xsize * InVals->ysize * InVals->zsize ;
   printf("voxelvolume %g mm3\n",voxelvolume);
 
+  if(DoSqr){
+    printf("Computing square of input\n");
+    MRIsquare(InVals,NULL,InVals);
+  }
+
   // -------------------- handle masking ------------------------
   if (maskpath) {
     printf("Loading mask %s\n",maskpath);
     mask = MRIread(maskpath);
-    if (mask==NULL) exit(1);
+    if(mask==NULL) exit(1);
+    if(MRIdimMismatch(mask,InVals,0)){
+      printf("ERROR: dimension mismatch between mask and input\n");
+      exit(1);
+    }
     MRIbinarize2(mask, mask, maskthresh, 0, 1);
   }
   if (automask) {
@@ -637,6 +658,8 @@ static int parse_commandline(int argc, char **argv) {
     else if (!strcasecmp(option, "--save-detrended")) SaveDetrended = 1;
     else if (!strcasecmp(option, "--save-unmasked")) SaveUnmasked = 1;
     else if (!strcasecmp(option, "--smooth-only")) SmoothOnly = 1;
+    else if (!strcasecmp(option, "--so")) SmoothOnly = 1;
+    else if (!strcasecmp(option, "--sqr")) DoSqr = 1;
     else if (!strcasecmp(option, "--ispm")) InValsType = MRI_ANALYZE_FILE;
     else if (!strcasecmp(option, "--ar2")) DoAR2 = 1;
     else if (!strcasecmp(option, "--gdiag")) Gdiag_no = 1;
@@ -733,6 +756,11 @@ static int parse_commandline(int argc, char **argv) {
       sscanf(pargv[0],"%d",&SynthSeed);
       synth = 1;
       nargsused = 1;
+    } else if (!strcasecmp(option, "--tr")) {
+      if (nargc < 1) CMDargNErr(option,1);
+      sscanf(pargv[0],"%lf",&TR);
+      SetTR = 1;
+      nargsused = 1;
     } else if (!strcasecmp(option, "--o")) {
       if (nargc < 1) CMDargNErr(option,1);
       outpath = pargv[0];
@@ -792,7 +820,7 @@ static void print_usage(void) {
   printf("   --o outputvol : save input after smoothing\n");
   printf("   --save-detrended : detrend output when saving\n");
   printf("   --save-unmasked  : do not mask outputvol\n");
-  printf("   --smooth-only    : smooth and save, do not compute fwhm.\n");
+  printf("   --smooth-only    : smooth and save, do not compute fwhm (--so)\n");
   printf("\n");
   printf("   --mask maskvol : binary mask\n");
   printf("   --mask-thresh absthresh : threshold for mask (default is .5)\n");
@@ -803,6 +831,7 @@ static void print_usage(void) {
   printf("\n");
   printf("   --X x.mat : matlab4 detrending matrix\n");
   printf("   --detrend order : polynomial detrending (default 0)\n");
+  printf("   --sqr : compute square of input before smoothing\n");
   printf("\n");
   printf("   --fwhm fwhm : smooth BY fwhm before measuring\n");
   printf("   --gstd gstd : same as --fwhm but specified as the stddev\n");

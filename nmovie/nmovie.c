@@ -1,15 +1,14 @@
 /**
  * @file  nmovie.c
- * @brief REPLACE_WITH_ONE_LINE_SHORT_DESCRIPTION
+ * @brief image display utility
  *
- * REPLACE_WITH_LONG_DESCRIPTION_OR_REFERENCE
  */
 /*
- * Original Author: REPLACE_WITH_FULL_NAME_OF_CREATING_AUTHOR 
+ * Original Author: RJ Wood
  * CVS Revision Info:
  *    $Author: nicks $
- *    $Date: 2011/09/28 21:14:00 $
- *    $Revision: 1.29.2.1 $
+ *    $Date: 2012/03/17 20:33:11 $
+ *    $Revision: 1.31 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -23,16 +22,7 @@
  *
  */
 
-
-// nmovie.c
-//
-// Warning: Do not edit the following four lines.  CVS maintains them.
-// Revision Author: $Author: nicks $
-// Revision Date  : $Date: 2011/09/28 21:14:00 $
-// Revision       : $Revision: 1.29.2.1 $
-//
-////////////////////////////////////////////////////////////////////
-char *NMOVIE_VERSION = "$Revision: 1.29.2.1 $";
+char *NMOVIE_VERSION = "$Revision: 1.31 $";
 #include <stdio.h>
 #include <image.h>
 #include <stdlib.h>
@@ -635,8 +625,8 @@ int main(int argc, char **argv) {
   /* rkt: check for and handle version tag */
   nargs = handle_version_option
           (argc, argv,
-           "$Id: nmovie.c,v 1.29.2.1 2011/09/28 21:14:00 nicks Exp $",
-           "$Name: stable5 $");
+           "$Id: nmovie.c,v 1.31 2012/03/17 20:33:11 nicks Exp $",
+           "$Name:  $");
   if (nargs && argc - nargs == 1)
     exit (0);
   argc -= nargs;
@@ -696,6 +686,11 @@ int main(int argc, char **argv) {
   ConvertImages(nframes,argv);
 
   XtMapWidget(toplevel);
+
+//  XRaiseWindow(xi.disp, XtWindow(toplevel));
+//  XSelectInput(xi.disp, XtWindow(toplevel), KeyPressMask);
+//  XMapWindow(xi.disp, XtWindow(toplevel));
+  XtRealizeWidget(toplevel);
 
   XtAppMainLoop(xi.context);
 

@@ -16,8 +16,8 @@
  * Original Author: Xiao Han
  * CVS Revision Info:
  *    $Author: nicks $
- *    $Date: 2011/10/04 18:37:21 $
- *    $Revision: 1.4.2.2 $
+ *    $Date: 2011/10/04 18:37:30 $
+ *    $Revision: 1.8 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -220,8 +220,8 @@ main(int argc, char *argv[])
   /* rkt: check for and handle version tag */
   nargs = handle_version_option (
     argc, argv,
-    "$Id: mri_ms_EM.c,v 1.4.2.2 2011/10/04 18:37:21 nicks Exp $",
-    "$Name: stable5 $");
+    "$Id: mri_ms_EM.c,v 1.8 2011/10/04 18:37:30 nicks Exp $",
+    "$Name:  $");
   if (nargs && argc - nargs == 1)
   {
     exit (0);

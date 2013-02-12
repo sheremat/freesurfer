@@ -3,6 +3,7 @@
 #
 
 dist_bin_SCRIPTS = \
+annot2std \
 aparc2feat \
 aseg2feat \
 aparcstats2table \
@@ -15,7 +16,7 @@ beta2sxa \
 bblabel \
 bbregister \
 biasfield \
-bedpostx_seychelles \
+bedpostx_mgh \
 browse-minc-header.tcl \
 bugr \
 build_desikan_killiany_gcs.csh \
@@ -54,7 +55,7 @@ fname2stem \
 fscalc \
 fscalc.fsl \
 fsgd_parser.py \
-fsl_sub_seychelles \
+fsl_sub_mgh \
 fsutils.py \
 stem2fname \
 freesurfer \
@@ -89,6 +90,7 @@ labels_intersect \
 labels_disjoint \
 long_mris_slopes \
 long_stats_slopes \
+long_stats_combine \
 long_stats_tps \
 long_submit_jobs \
 long_submit_postproc \
@@ -100,6 +102,9 @@ make_average_volume \
 make_average_subject \
 make_average_subcort \
 make_cortex_label \
+make_upright \
+make_symmetric \
+make_hemi_mask \
 make-segvol-table \
 map_all_labels \
 map_all_labels-lh \
@@ -147,6 +152,7 @@ ms_refine_subject \
 parc_atlas_jackknife_test \
 petsc_setup \
 plot_structure_stats.tcl \
+print_unique_labels.csh \
 progressbar.tcl \
 fsr-checkxopts \
 fsr-getxopts \
@@ -170,6 +176,7 @@ renormalize_subject \
 renormalize_subject_keep_editting \
 renormalize_T1_subject \
 reregister_subject_mixed \
+rtview \
 run-qdec-glm \
 segment_monkey \
 segment_subject \
@@ -190,6 +197,7 @@ spm_t_to_b \
 spmregister \
 sratio \
 subject_info.py \
+surfreg \
 pctsurfcon\
 talairach \
 talairach2 \
@@ -214,13 +222,14 @@ unpacksdcmdir \
 UpdateNeeded \
 usbtree \
 vno_match_check \
-vsm-smooth \
 qt_setup \
+vsm-smooth \
 vtk_setup \
 wfilemask \
 wm-anat-snr \
 xfmrot \
 xhemireg \
+xhemi-tal \
 xsanatreg
 
 tcldir = $(prefix)/lib/tcl

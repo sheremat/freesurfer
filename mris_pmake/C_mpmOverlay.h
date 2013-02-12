@@ -16,8 +16,8 @@
  * Original Author: Rudolph Pienaar
  * CVS Revision Info:
  *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.2 $
+ *    $Date: 2012/11/14 22:10:16 $
+ *    $Revision: 1.6 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -38,10 +38,6 @@
 extern  "C" {
 #endif
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
 #include "mri.h"
 #include "mrisurf.h"
 #include "label.h"
@@ -59,7 +55,8 @@ extern  "C" {
 
 using namespace std;
 
-const int       MPMOVERLAYSTACKDEPTH     = 64;
+const int       MPMOVERLAYSTACKDEPTH    = 64;
+const int       STRBUF                  = 65536;
 
 // enum typedef for the overlays relevant to FreeSurfer
 typedef enum _e_overlay {
@@ -210,7 +207,11 @@ class C_mpmOverlay {
     bool		costVector_write(string astr_fileName = "");
     virtual float	costEdge_calc(int i, int j)	= 0;
     string  		curvFileName_get( EOVERLAY ae_overlay);
-
+    e_FILEACCESS        CURV_fileRead(
+                                string    astr_curvFileName,
+                                float*    apf_curv[],
+                                int*      api_size
+                                );
 };
 
 //
@@ -259,6 +260,52 @@ class C_mpmOverlay_unity : public C_mpmOverlay {
 };
 
 //
+// A "distance" subclass -- returns a (weighted) distance between
+// two vertices by look up in the FreeSurfer mesh.
+//
+class C_mpmOverlay_distance : public C_mpmOverlay {
+
+  protected:
+
+  public:
+    C_mpmOverlay_distance(s_env* aps_env);
+    ~C_mpmOverlay_distance(void);
+
+    //
+    // Access block
+    //
+
+    //
+    // Functional block
+    //
+    void			costWeightVector_init(void);
+    virtual float		costEdge_calc(int i, int j);
+};
+
+//
+// A "distance" subclass -- returns a (weighted) distance between
+// two vertices by look up in the FreeSurfer mesh.
+//
+class C_mpmOverlay_euclidean : public C_mpmOverlay {
+
+  protected:
+
+  public:
+    C_mpmOverlay_euclidean(s_env* aps_env);
+    ~C_mpmOverlay_euclidean(void);
+
+    //
+    // Access block
+    //
+
+    //
+    // Functional block
+    //
+    void			costWeightVector_init(void);
+    virtual float		costEdge_calc(int i, int j);
+};
+
+//
 // An overlay subclass that reads in the complete set of FreeSurfer 
 // curvature/thickness files
 //
@@ -287,6 +334,37 @@ class C_mpmOverlay_FScurvs : public C_mpmOverlay {
     virtual float		costEdge_calc(int i, int j);
 };
 
+//
+// An overlay subclass that reads in the complete set of FreeSurfer 
+// curvature/thickness files
+//
+class C_mpmOverlay_curvature : public C_mpmOverlay {
+
+	//
+	// This class reads in a single "curvature" type file and
+        // uses these for edge weights.
+        //
+
+  protected:
+    int		mv_size;
+    float*      mpf_curvatureData;
+    e_stats     mes_curvStats;
+
+  public:
+    C_mpmOverlay_curvature(s_env* aps_env, string astr_curvFileStem, 
+                           string astr_costWeightFile = "");
+    ~C_mpmOverlay_curvature(void);
+
+    //
+    // Access block
+    //
+
+    //
+    // Functional block
+    //
+    void			costWeightVector_init(void);
+    virtual float		costEdge_calc(int i, int j);
+};
 
 
 #endif //__C_MPMOVERLAY_H__

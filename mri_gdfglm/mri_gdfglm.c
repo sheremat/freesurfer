@@ -11,8 +11,8 @@
  * Original Author: Douglas N. Greve
  * CVS Revision Info:
  *    $Author: greve $
- *    $Date: 2011/05/05 15:29:51 $
- *    $Revision: 1.8.2.1 $
+ *    $Date: 2011/05/05 15:28:03 $
+ *    $Revision: 1.9 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -91,7 +91,7 @@ static int WriteClassDat(char *base, char *Class, FSGD *fsgd,
 //static int  stringmatch(char *str1, char *str2);
 int main(int argc, char *argv[]) ;
 
-static char vcid[] = "$Id: mri_gdfglm.c,v 1.8.2.1 2011/05/05 15:29:51 greve Exp $";
+static char vcid[] = "$Id: mri_gdfglm.c,v 1.9 2011/05/05 15:28:03 greve Exp $";
 const char *Progname = "mri_gdfglm";
 
 typedef struct tagCOVARPRUNE {
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
   int nargs;
 
   /* rkt: check for and handle version tag */
-  nargs = handle_version_option (argc, argv, "$Id: mri_gdfglm.c,v 1.8.2.1 2011/05/05 15:29:51 greve Exp $", "$Name: stable5 $");
+  nargs = handle_version_option (argc, argv, "$Id: mri_gdfglm.c,v 1.9 2011/05/05 15:28:03 greve Exp $", "$Name:  $");
   if (nargs && argc - nargs == 1)
     exit (0);
   argc -= nargs;

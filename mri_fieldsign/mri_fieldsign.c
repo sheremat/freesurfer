@@ -8,8 +8,8 @@
  * Original Author: Douglas N. Greve
  * CVS Revision Info:
  *    $Author: greve $
- *    $Date: 2011/10/05 21:57:53 $
- *    $Revision: 1.14.2.1 $
+ *    $Date: 2011/10/05 21:57:21 $
+ *    $Revision: 1.15 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -33,7 +33,7 @@
 */
 
 
-// $Id: mri_fieldsign.c,v 1.14.2.1 2011/10/05 21:57:53 greve Exp $
+// $Id: mri_fieldsign.c,v 1.15 2011/10/05 21:57:21 greve Exp $
 
 /*
   BEGINHELP
@@ -86,7 +86,7 @@ MRI *SFA2MRI(MRI *eccen, MRI *polar, int SFATrue);
 
 int main(int argc, char *argv[]) ;
 
-static char vcid[] = "$Id: mri_fieldsign.c,v 1.14.2.1 2011/10/05 21:57:53 greve Exp $";
+static char vcid[] = "$Id: mri_fieldsign.c,v 1.15 2011/10/05 21:57:21 greve Exp $";
 char *Progname = NULL;
 char *cmdline, cwd[2000];
 int debug=0;
@@ -128,7 +128,7 @@ int main(int argc, char *argv[]) {
   MRI *eccensfa, *polarsfa, *mri, *mritmp;
   MRI *eccenreal,*eccenimag,*polarreal,*polarimag;
 
-  nargs = handle_version_option (argc, argv, vcid, "$Name: stable5 $");
+  nargs = handle_version_option (argc, argv, vcid, "$Name:  $");
   if (nargs && argc - nargs == 1) exit (0);
   argc -= nargs;
   cmdline = argv2cmdline(argc,argv);
