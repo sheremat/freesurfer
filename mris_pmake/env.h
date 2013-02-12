@@ -11,9 +11,9 @@
 /*
  * Original Author: Rudolph Pienaar / Christian Haselgrove
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.16 $
+ *    $Author: rudolph $
+ *    $Date: 2013/01/29 16:57:40 $
+ *    $Revision: 1.24 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -32,10 +32,13 @@
 
 #include <sys/stat.h>
 
-#include "general.h"
+//#include "legacy.h"
+//#include "general.h"
+
 #include "c_SMessage.h"
 #include "c_SSocket.h"
 #include "scanopt.h"
+
 
 #ifdef __cplusplus
 extern  "C" {
@@ -58,6 +61,28 @@ using namespace std;
 class C_mpmProg;
 class C_mpmOverlay;
 
+// For legacy handling...
+typedef struct _weights 	s_weights;
+typedef struct _Dweights	s_Dweights;
+
+/// s_iterInfo contains information pertaining to a particular iteration
+/// of the main program loop. It is accessed during each call to the
+/// cost function, and is populated with per-call information.
+///
+typedef struct _iterInfo {
+  int       iter;
+  float     f_distance;
+  float     f_curvature;
+  float     f_sulcalHeight;
+  float     f_dir;
+}
+s_iterInfo;
+
+typedef enum {
+  e_default, e_unity, e_euclid, e_distance
+} e_COSTFUNCTION;
+
+#if 0
 /// Weights and values for the main cost function polynomial.
 typedef struct _weights {
   float wd;         // distance
@@ -127,6 +152,7 @@ void s_Dweights_print( s_Dweights& asw);
 /// \return    (void)
 void  s_Dweights_setAll( s_Dweights& asw,
                          float  af);
+
 /// s_iterInfo contains information pertaining to a particular iteration
 /// of the main program loop. It is accessed during each call to the
 /// cost function, and is populated with per-call information.
@@ -140,13 +166,10 @@ typedef struct _iterInfo {
 }
 s_iterInfo;
 
-/// The main environment structure. This structure records important
-/// variables, mostly interpreted from the process <b>options</b> file.
-typedef struct _env s_env;
-
 typedef enum {
   e_default, e_unity, e_euclid, e_distance
 } e_COSTFUNCTION;
+#endif
 
 typedef enum {
   e_workingCurvature, e_workingSulcal, e_auxillary
@@ -156,6 +179,9 @@ typedef enum {
   e_user, e_sys, e_result
 } e_LOG;
 
+/// The main environment structure. This structure records important
+/// variables, mostly interpreted from the process <b>options</b> file.
+typedef struct _env s_env;
 
 /// 
 /// mpm MODULE enums
@@ -165,23 +191,46 @@ typedef enum _e_MODULE {
 	e_mpmProg, e_mpmOverlay, emodule
 } e_MODULE;
 
+// String names for these are defined in env.cpp using 'push_back()'
+// To add new modules:
+//      o Create the index here
+//      o Edit the s_env_mpmProgSetIndex(...)
+//
+// Internal module name check on passed command line args:
+//      o help::mpmProg_check()
+
 typedef enum _e_mpmProg {
-    emp_NULL 		= -1, 
-    emp_NOP 		= 0,
-    emp_pathFind	= 1,
-    emp_autodijk 	= 2, 
-    emp_autodijk_fast 	= 3,
+    emp_NULL 		= 0, 
+    emp_NOP 		= 1,
+    emp_pathFind	= 2,
+    emp_autodijk 	= 3, 
+    emp_autodijk_fast 	= 4,
+    emp_ROI             = 5,
+    emp_externalMesh	= 6,
     empmprog
 } e_MPMPROG;
 
 // enum typedef for mpmOverlays
+// ordering should be same as e_COSTFUNCTION
+//
+// String names for these are defined in env.cpp using 'push_back()'
+//      o env::s_env_nullify()
+//
+// Add case handling to:
+//      o asynch:asynchEvent_processMRMPROG()
+//      o env::s_env_mpmProgSetIndex()
+//      o help::mpmOverlay_check()
+//
 typedef enum _e_mpmOverlay {
-    emo_NULL 		= -1,	// NULL overlay -- for debugging
-    emo_NOP		= 0,	// NOP overlay -- for debugging 
-    emo_unity		= 1,	// returns '1' for each internode distance	
-    emo_euclidean	= 2,	// returns distance between nodes (calculated)
-    emo_distance	= 3,	// returns distance between nodes (read)
-    emo_fscurvs		= 4,	// returns weighted cost function of curvs
+    emo_LEGACY          = 0,    // LEGACY overlay -- toggles cost calc to legacy
+                                // engine.
+    emo_NULL 		= 1,	// NULL overlay -- for debugging
+    emo_NOP		= 2,	// NOP overlay -- for debugging 
+    emo_unity		= 3,	// returns '1' for each internode distance	
+    emo_euclidean	= 4,	// returns distance between nodes (calculated)
+    emo_distance	= 5,	// returns distance between nodes (read)
+    emo_fscurvs		= 6,	// returns weighted cost function of curvs
+    emo_curvature       = 7,    // returns curvature between nodes
     empmoverlay
 } e_MPMOVERLAY;
 
@@ -191,9 +240,10 @@ typedef enum _e_mpmOverlay {
 ///
 
 typedef struct _env {
-    s_weights*    pSTw;                     // weight structure
-    s_Dweights*   pSTDw;                    // Del weight structure
-
+    int           argc;                     // original number of command line
+                                            // args
+    char**        ppch_argv;                // char array of command line args
+    
     C_scanopt*	  pcso_options;		    // class that houses the parsed
     					    //+ options file for the environment
     C_SMessage*   pcsm_optionsFile;         // message wrapper for options file
@@ -208,10 +258,11 @@ typedef struct _env {
     int           rw;                       // right width (for stdout format)
 
     bool          b_syslogPrepend;          // prepend syslog style
-    C_SMessage*   pcsm_stdout;              // stdout C_SMessage object
+    string        str_stdout;
     string        str_userMsgLog;
     string        str_sysMsgLog;
     string        str_resultMsgLog;
+    C_SMessage*   pcsm_stdout;              // stdout C_SMessage object
     C_SMessage*   pcsm_syslog;              // log file for "sys" events
     C_SMessage*   pcsm_userlog;             // log file for "user" events
     C_SMessage*   pcsm_resultlog;           // log file for "result" event
@@ -257,13 +308,20 @@ typedef struct _env {
                                             // process
     string        str_subject;
     string        str_hemi;
-    string        str_mainSurfaceFileName;
-    string        str_auxSurfaceFileName;
-    string        str_mainCurvatureFileName;
-    string        str_auxCurvatureFileName;
-    MRIS*         pMS_curvature;            // (inflated) curvature surface
-    MRIS*         pMS_sulcal;               // (inflated) sulcal height surface
-    MRIS*         pMS_auxSurface;           // auxillary (optional) surface
+    string        str_surface;
+
+    MRIS*         pMS_primary;              // primary surface
+    string        str_primarySurfaceFileName;
+    string        str_primaryCurvatureFileName;
+    bool          b_primaryCurvature;
+
+    MRIS*         pMS_secondary;            // secondary (optional) surface
+    string        str_secondarySurfaceFileName;
+    bool          b_secondarySurface;
+    string        str_secondaryCurvatureFileName;
+    bool          b_secondaryCurvature;
+
+    MRIS*         pMS_auxillary;            // auxillary surface
 
     bool          b_surfacesKeepInSync;     // flag: behavioural /
                                             //+ conditional. Evaluate
@@ -289,9 +347,15 @@ typedef struct _env {
                                             //+ Set to TRUE if finding
                                             //+ ply distances from
                                             //+ existing path
+
+    //
+    // LEGACY CODE
+    s_weights*    pSTw;                     // weight structure
+    s_Dweights*   pSTDw;                    // Del weight structure
+
     int           totalNumFunctions;        // total number of cost
                                             // functions
-    s_iterInfo	  st_iterInfo;	            // structure that houses
+    s_iterInfo*	  pst_iterInfo;	            // structure that houses
     					    //+ per-iteration information
     e_COSTFUNCTION ecf_current;             // the current cost function
     string*       pstr_functionName;        // names of each cost function
@@ -303,6 +367,8 @@ typedef struct _env {
         int             j,
         bool            b_relNextReference
     );
+    // LEGACY CODE
+    //
 
     //
     // Modules
@@ -401,6 +467,25 @@ void s_env_b_surfacesClear_set(
     bool        b_val
 );
 
+float s_env_plyDepth_get(
+    s_env&   ast_env
+);
+
+void s_env_plyDepth_set(
+    s_env&      ast_env,
+    float       af_val
+);
+
+float s_env_plyIncrement_get(
+    s_env&   ast_env
+);
+
+void s_env_plyIncrement_set(
+    s_env&      ast_env,
+    float       af_val
+);
+
+
 bool s_env_surfaceFile_set(
     s_env&      st_env,
     string      astr_fileName
@@ -411,7 +496,7 @@ bool s_env_surfaceCurvature_set(
     string      astr_fileName
 );
 
-bool s_env_surfaceSulcal_set(
+bool s_env_secondarySurface_setCurvature(
     s_env&      st_env,
     string      astr_fileName
 );
@@ -452,6 +537,7 @@ s_env_mpmOverlaySetIndex(
     int         aindex
 );
 
+#if 0
 void s_env_costFctList(
     s_env&      ast_env
 );
@@ -537,7 +623,7 @@ float   costFunc_distanceReturn(
   int   j,
   bool  b_relNextReference = true
 );
-
+#endif
 
 #endif //__ENV_H__
 

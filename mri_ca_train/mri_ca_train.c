@@ -10,9 +10,9 @@
 /*
  * Original Author: Bruce Fischl
  * CVS Revision Info:
- *    $Author: fischl $
- *    $Date: 2011/03/16 19:27:36 $
- *    $Revision: 1.64 $
+ *    $Author: greve $
+ *    $Date: 2012/02/21 18:34:19 $
+ *    $Revision: 1.66 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -70,6 +70,7 @@ static int  insert_label = 0 ;
 static char *histo_fname = NULL ;
 
 static float scale = 0 ;
+static int force_inputs = 1 ;
 
 static GCA_PARMS parms ;
 static char *seg_dir = "seg_edited.mgz" ; // default name of manual edit file
@@ -128,8 +129,8 @@ main(int argc, char *argv[])
   /* rkt: check for and handle version tag */
   nargs = handle_version_option
           (argc, argv,
-           "$Id: mri_ca_train.c,v 1.64 2011/03/16 19:27:36 fischl Exp $",
-           "$Name: stable5 $");
+           "$Id: mri_ca_train.c,v 1.66 2012/02/21 18:34:19 greve Exp $",
+           "$Name:  $");
   if (nargs && argc - nargs == 1)
     exit (0);
   argc -= nargs;
@@ -318,7 +319,12 @@ main(int argc, char *argv[])
             ErrorExit
             (ERROR_NOFILE,
              "%s: could not read image from file %s", Progname, fname) ;
-          for (o = 0 ; o < ninputs ; o++)
+	  if (force_inputs)
+	  {
+	    ordering[input] = input ;
+	    used[input] = 1 ;
+	  }
+	  else for (o = 0 ; o < ninputs ; o++)
             if (FEQUAL(TRs[o],mri_tmp->tr) &&
                 FEQUAL(FAs[o],mri_tmp->flip_angle) &&
                 FEQUAL(TEs[o],mri_tmp->te))
@@ -426,9 +432,10 @@ main(int argc, char *argv[])
           FAs[input] = mri_tmp->flip_angle ;
           TEs[input] = mri_tmp->te ;
         }
-        else if (!FEQUAL(TRs[input],mri_tmp->tr) ||
+        else if ((force_inputs == 0) &&
+		 (!FEQUAL(TRs[input],mri_tmp->tr) ||
                  !FEQUAL(FAs[input],mri_tmp->flip_angle) ||
-                 !FEQUAL(TEs[input], mri_tmp->te))
+		  !FEQUAL(TEs[input], mri_tmp->te)))
           ErrorExit
           (ERROR_BADPARM,
            "%s: subject %s input volume %s: sequence parameters "
@@ -480,7 +487,10 @@ main(int argc, char *argv[])
           printf("histogram equalizing input image...\n") ;
           MRIhistoEqualize(mri_tmp, mri_eq, mri_tmp, 30, 170) ;
         }
-        MRIcopyFrame(mri_tmp, mri_inputs, 0, input) ;
+	fflush(stdout);fflush(stderr);
+        mri_inputs=MRIcopyFrame(mri_tmp, mri_inputs, 0, input) ;
+	fflush(stdout);fflush(stderr);
+	if(mri_inputs == NULL) exit(1);
         MRIfree(&mri_tmp) ;
       }// end of inputs per subject
 
@@ -578,7 +588,8 @@ main(int argc, char *argv[])
           for (i = 0 ; i < ninputs ; i++)
           {
             mri_grad = MRIxSobel(mri_smooth, NULL, i) ;
-            MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+            mri_inputs=MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+	    if(mri_inputs == NULL) exit(1);
             MRIfree(&mri_grad) ;
           }
           start += ninputs ;
@@ -588,7 +599,8 @@ main(int argc, char *argv[])
           for (i = 0 ; i < ninputs ; i++)
           {
             mri_grad = MRIySobel(mri_smooth, NULL, i) ;
-            MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+            mri_inputs=MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+	    if(mri_inputs == NULL) exit(1);
             MRIfree(&mri_grad) ;
           }
           start += ninputs ;
@@ -598,7 +610,8 @@ main(int argc, char *argv[])
           for (i = 0 ; i < ninputs ; i++)
           {
             mri_grad = MRIzSobel(mri_smooth, NULL, i) ;
-            MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+            mri_inputs=MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+	    if(mri_inputs == NULL) exit(1);
             MRIfree(&mri_grad) ;
           }
           start += ninputs ;
@@ -790,7 +803,8 @@ main(int argc, char *argv[])
           printf("histogram equalizing input image...\n") ;
           MRIhistoEqualize(mri_tmp, mri_eq, mri_tmp, 30, 170) ;
         }
-        MRIcopyFrame(mri_tmp, mri_inputs, 0, input) ;
+        mri_inputs=MRIcopyFrame(mri_tmp, mri_inputs, 0, input) ;
+	if(mri_inputs == NULL) exit(1);
         MRIfree(&mri_tmp) ;
       } // end of building inputs
       ///////////////////////////////////////////////////////////
@@ -858,7 +872,8 @@ main(int argc, char *argv[])
           for (i = 0 ; i < ninputs ; i++)
           {
             mri_grad = MRIxSobel(mri_smooth, NULL, i) ;
-            MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+            mri_inputs=MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+	    if(mri_inputs == NULL) exit(1);
             MRIfree(&mri_grad) ;
           }
           start += ninputs ;
@@ -868,7 +883,8 @@ main(int argc, char *argv[])
           for (i = 0 ; i < ninputs ; i++)
           {
             mri_grad = MRIySobel(mri_smooth, NULL, i) ;
-            MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+            mri_inputs=MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+	    if(mri_inputs == NULL) exit(1);
             MRIfree(&mri_grad) ;
           }
           start += ninputs ;
@@ -878,7 +894,8 @@ main(int argc, char *argv[])
           for (i = 0 ; i < ninputs ; i++)
           {
             mri_grad = MRIzSobel(mri_smooth, NULL, i) ;
-            MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+            mri_inputs=MRIcopyFrame(mri_grad, mri_inputs, 0, start+i) ;
+	    if(mri_inputs == NULL) exit(1);
             MRIfree(&mri_grad) ;
           }
           start += ninputs ;
@@ -1217,6 +1234,10 @@ get_option(int argc, char *argv[])
   }
   else switch (toupper(*option))
     {
+    case 'F':
+      force_inputs = 1 ;
+      printf("forcing use of inputs even if acquisition parameters don't match\n");
+      break ;
     case 'S':
       scale = atof(argv[2]) ;
       printf("scaling all volumes by %2.3f after reading...\n", scale) ;

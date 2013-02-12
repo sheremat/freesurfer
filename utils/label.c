@@ -8,9 +8,9 @@
 /*
  * Original Author: Bruce Fischl
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/04/27 13:59:36 $
- *    $Revision: 1.100.2.1 $
+ *    $Author: fischl $
+ *    $Date: 2012/10/01 18:59:58 $
+ *    $Revision: 1.110 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -131,7 +131,7 @@ LABEL *LabelRead(const char *subject_name, const char *label_name)
 
   //  printf("%s %s\n",label_name0,fname);
 
-  strcpy(area->name, label_name) ;
+  strncpy(area->name, label_name, STRLEN-1) ;
 
   /* read in the file */
   errno = 0 ;
@@ -848,7 +848,7 @@ LabelAlloc(int max_points, char *subject_name, char *label_name)
   {
     if (label_name)
     {
-      strcpy(area->name, label_name) ;
+      strncpy(area->name, label_name, STRLEN-1) ;
     }
   }
   strcpy(area->space, "");
@@ -1489,6 +1489,34 @@ LabelMark(LABEL *area, MRI_SURFACE *mris)
         Description
 ------------------------------------------------------*/
 int
+LabelAddToMark(LABEL *area, MRI_SURFACE *mris, int val_to_add)
+{
+  int    n, vno ;
+  VERTEX *v ;
+
+  for (n = 0 ; n < area->n_points ; n++)
+  {
+    vno = area->lv[n].vno ;
+    if (vno < 0 || vno >= mris->nvertices)
+    {
+      DiagBreak() ;
+    }
+    if (area->lv[n].deleted > 0)
+      continue ;
+
+    v = &mris->vertices[vno] ;
+    v->marked += val_to_add ;
+  }
+  return(NO_ERROR) ;
+}
+/*-----------------------------------------------------
+        Parameters:
+
+        Returns value:
+
+        Description
+------------------------------------------------------*/
+int
 LabelMarkWithThreshold(LABEL *area, MRI_SURFACE *mris, float thresh)
 {
   int    n, vno ;
@@ -1733,6 +1761,34 @@ LabelFromMarkValue(MRI_SURFACE *mris, int mark)
 }
 /*-----------------------------------------------------
 ------------------------------------------------------*/
+int
+LabelAddToSurfaceMark(LABEL *area, MRI_SURFACE *mris, int mark_to_add) 
+{
+  int     n, vno ;
+  VERTEX  *v ;
+
+  for (n = 0 ; n < area->n_points ; n++)
+  {
+    vno = area->lv[n].vno ;
+    if(vno < 0)
+      continue ;
+
+    if(vno >= mris->nvertices)
+    {
+      printf("ERROR: LabelMarkSurface: label point %d exceeds nvertices %d\n",
+             vno,mris->nvertices);
+      return(1);
+    }
+    v = &mris->vertices[vno] ;
+    if(v->ripflag)
+      continue ;
+
+    v->marked += mark_to_add ;
+  }
+  return(NO_ERROR) ;
+}
+/*-----------------------------------------------------
+------------------------------------------------------*/
 int LabelMarkSurface(LABEL *area, MRI_SURFACE *mris)
 {
   int     n, vno ;
@@ -1820,7 +1876,7 @@ LabelFillUnassignedVertices(MRI_SURFACE *mris, LABEL *area, int coords)
   vx = vy = vz = -1;
 
   MRIScomputeVertexSpacingStats(mris, NULL, NULL, &max_spacing,
-                                NULL,&max_vno, CURRENT_VERTICES);
+                                NULL,&max_vno, coords);
 
   for (i = n = 0 ; n < area->n_points ; n++)
   {
@@ -2444,6 +2500,8 @@ LabelFillHoles(LABEL *area_src, MRI_SURFACE *mris, int coords)
 
   vx = vy = vz = -1;
   mri = MRIalloc(256,256,256,MRI_UCHAR) ;
+  
+  useVolGeomToMRI(&mris->vg, mri);
   area_dst = LabelAlloc(mris->nvertices, mris->subject_name, area_src->name) ;
   LabelCopy(area_src, area_dst) ;
   LabelFillUnassignedVertices(mris, area_dst, coords) ;
@@ -2710,6 +2768,7 @@ LABEL *LabelfromASeg(MRI *aseg, int segcode)
           lb->lv[nlabel].x = ras->rptr[1][1];
           lb->lv[nlabel].y = ras->rptr[2][1];
           lb->lv[nlabel].z = ras->rptr[3][1];
+	  lb->lv[nlabel].vno = -1 ;   // not assigned yet
           nlabel++;
         }
       }
@@ -3119,6 +3178,34 @@ LabelMaskSurface(LABEL *area, MRI_SURFACE *mris)
   return(NO_ERROR) ;
 }
 int
+LabelMaskSurfaceVolume(LABEL *area, MRI *mri, float nonmask_val)
+{
+  int    vno, n, x, y, z, f ;
+  uchar  *marked ;
+  long   nvox ;
+
+  nvox = mri->width*mri->height*mri->depth*mri->nframes ;
+  marked = (uchar *)calloc(nvox, sizeof(uchar)) ;
+  for (n = 0 ; n < area->n_points ; n++)
+  {
+    vno = area->lv[n].vno ;
+    if (vno >= 0)
+      marked[vno] = 1 ;
+  }
+  for (n = x = 0 ; x < mri->width ; x++)
+    for (y = 0 ; y < mri->height ; y++)
+      for (z = 0 ; z < mri->depth ; z++)
+	for (f = 0 ; f < mri->nframes ; f++, n++)
+	{
+	  if (marked[n])
+	    continue ;
+	  MRIsetVoxVal(mri, x, y, z, f, nonmask_val) ;
+	}
+
+  free(marked) ;
+  return(NO_ERROR) ;
+}
+int
 LabelCentroid(LABEL *area, MRI_SURFACE *mris, double *px, double *py, double *pz)
 {
   int    vno, num, n  ;
@@ -3145,3 +3232,34 @@ LabelCentroid(LABEL *area, MRI_SURFACE *mris, double *px, double *py, double *pz
   return(NO_ERROR) ;
 }
 
+int
+LabelFillVolume(MRI *mri, LABEL *area, int fillval)
+{
+  int           n ;
+  double        xv, yv, zv ;
+  LABEL_VERTEX  *lv ;
+
+  for (n = 0 ; n < area->n_points ; n++)
+  {
+    lv = &area->lv[n] ;
+    MRIsurfaceRASToVoxel(mri, lv->x, lv->y, lv->z, &xv, &yv, &zv) ;
+    MRIsetVoxVal(mri, nint(xv), nint(yv), nint(zv), 0, fillval) ;
+  }
+  return(NO_ERROR) ;
+}
+
+int
+LabelSetVals(MRI_SURFACE *mris, LABEL *area, float fillval)
+{
+  int           n ;
+  LABEL_VERTEX  *lv ;
+
+  for (n = 0 ; n < area->n_points ; n++)
+  {
+    lv = &area->lv[n] ;
+    if (lv->deleted || lv->vno < 0)
+      continue ;
+    mris->vertices[lv->vno].val = fillval ;
+  }
+  return(NO_ERROR) ;
+}

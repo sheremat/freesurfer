@@ -6,9 +6,9 @@
 /*
  * Original Authors: Segonne and Greve 
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/03/02 00:04:10 $
- *    $Revision: 1.19 $
+ *    $Author: greve $
+ *    $Date: 2012/10/03 21:28:35 $
+ *    $Revision: 1.21 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -64,4 +64,10 @@ int MRISsphericalCoords(MRIS *surf);
 int MRISfindPath ( int *vert_vno, int num_vno, int max_path_length,
                    int *path, int *path_length, MRIS *mris );
 
+double *
+MRISsampleProfile(MRI_SURFACE *mris, MRI *mri, double *profile, int nsamples, int wm_samples, int outside_samples,
+		  double wx,  double wy,  double wz,
+		  double l4x, double l4y, double l4z,
+		  double px,  double py,  double pz) ;
+MRI_SP *MRISmakeTemplate(int nsubjects, char **subjlist, int nhemis, char **hemilist, char *surfregname);
 #endif

@@ -2,7 +2,7 @@
 #
 umask 002;
 
-set VERSION = '$Id: dt_recon,v 1.15 2011/01/25 21:53:04 greve Exp $';
+set VERSION = '$Id: dt_recon,v 1.18 2012/07/11 20:44:59 lzollei Exp $';
 set ProgName = `basename $0`;
 
 set inputargs = ($argv);
@@ -109,6 +109,8 @@ if($DoEddyCorrect) then
   mkdir -p $ectmp
   pushd $ectmp > /dev/null
   set cmd = (eddy_correct $f $fec $ECRefTP) 
+  #set cmd = ($cmd; mri_convert ${fec:r} $fec)
+  #set cmd = ($cmd; rm -f ${fec:r})
   #set cmd = (cp $f $fec)
   echo "cd `pwd`" |  tee -a $LF
   echo $cmd       |  tee -a $LF 
@@ -133,7 +135,21 @@ echo "#@#-------------------------------" |  tee -a $LF
 echo "Fitting Tensors" |  tee -a $LF
 date |  tee -a $LF
 
-set cmd = (mri_glmfit --y $fec --glmdir $OutDir);
+# zip files to save space
+set cmd = (gzip $f)
+echo $cmd       |  tee -a $LF 
+$cmd            |& tee -a $LF
+if($status) exit 1;
+echo "" | tee -a $LF
+echo "" | tee -a $LF
+set cmd = (gzip $fec)
+echo $cmd       |  tee -a $LF 
+$cmd            |& tee -a $LF
+if($status) exit 1;
+echo "" | tee -a $LF
+echo "" | tee -a $LF
+
+set cmd = (mri_glmfit --y $fec.gz --glmdir $OutDir);
 if($#bvals == 0) then 
   set cmd = ($cmd --dti $infodump)
 else
@@ -158,7 +174,7 @@ if($#reg == 0) then
     echo "#@#-------------------------------" |  tee -a $LF
     echo "Registration" |  tee -a $LF
     date |  tee -a $LF
-    set cmd = (bbregister --s $subject --mov $OutDir/lowb.nii \
+    set cmd = (bbregister --s $subject --mov $OutDir/lowb.nii.gz \
        --init-fsl --reg $reg --bold)
     if($subject == fsaverage) set cmd = ($cmd --12)
     echo "setenv SUBJECTS_DIR $SUBJECTS_DIR" | tee -a $LF
@@ -183,8 +199,8 @@ if($DoTalairach) then
     exit 1;
   endif
   date |  tee -a $LF
-  set mask = $OutDir/mask.nii
-  set masktal = $OutDir/mask-tal.nii
+  set mask = $OutDir/mask.nii.gz
+  set masktal = $OutDir/mask-tal.nii.gz
   set cmd = (mri_vol2vol --reg $reg --tal --interp nearest\
               --mov $mask --o $masktal)
   echo "cd `pwd`" |  tee -a $LF
@@ -195,8 +211,8 @@ if($DoTalairach) then
   echo "" | tee -a $LF
 
   # Map FA to talairach space
-  set fa = $OutDir/fa.nii
-  set fatal = $OutDir/fa-tal.nii
+  set fa = $OutDir/fa.nii.gz
+  set fatal = $OutDir/fa-tal.nii.gz
   set cmd = (mri_vol2vol --reg $reg --tal --mov $fa --o $fatal)
   echo "cd `pwd`" |  tee -a $LF
   echo $cmd       |  tee -a $LF 
@@ -215,6 +231,7 @@ exit 0
 
 ############--------------##################
 parse_args:
+
 set cmdline = ($argv);
 while( $#argv != 0 )
 
@@ -370,10 +387,12 @@ arg3err:
 
 ############--------------##################
 check_params:
+
   if($#InputVol == 0) then
     echo "ERROR: must specify input volume"
     exit 1;
   endif
+ls -latr $InputVol
   if(! -e $InputVol) then
     echo "ERROR: cannot find $InputVol"
     exit 1;
@@ -382,13 +401,11 @@ check_params:
     echo "ERROR: must specify output dir"
     exit 1;
   endif
-
   if($DoRegistration) then
     if($#subject == 0) then
       echo "ERROR: must specify a subject"
       exit 1;
     endif
-
     if(! $?SUBJECTS_DIR ) then
       echo "ERROR: environment variable SUBJECTS_DIR not set"
       echo "  this can be done by setting it in the shell before"
@@ -407,12 +424,10 @@ check_params:
       exit 1;
     endif
   endif
- 
   if(! $?FREESURFER_HOME ) then
     echo "ERROR: environment variable FREESURFER_HOME not set."
     exit 1;
   endif
-
   which eddy_correct > /dev/null
   if($status) then
     echo "ERROR: cannot find eddy_correct. Make sure"
@@ -486,56 +501,56 @@ the b=0 values. There must be as many rows in the bvals/bvecs
 as there are frames in the input.
 
 Stages:
-1. Convert input to nifti (creates dwi.nii)
+1. Convert input to nifti (creates dwi.nii.gz)
 2. Eddy current and motion correction using FSLs eddy_correct,
-   creates dwi-ec.nii. Can take 1-2 hours.
+   creates dwi-ec.nii.gz. Can take 1-2 hours.
 3. DTI GLM Fit and tensor construction. Includes creation of:
-   tensor.nii -- maps of the tensor (9 frames)
-   eigvals.nii -- maps of the eigenvalues
-   eigvec?.nii -- maps of the eigenvectors
-   adc.nii -- apparent diffusion coefficient
-   fa.nii -- fractional anisotropy
-   ra.nii -- relative anisotropy
-   vr.nii -- volume ratio
-   ivc.nii -- intervoxel correlation
-   lowb.nii -- Low B 
+   tensor.nii.gz -- maps of the tensor (9 frames)
+   eigvals.nii.gz -- maps of the eigenvalues
+   eigvec?.nii.gz -- maps of the eigenvectors
+   adc.nii.gz -- apparent diffusion coefficient
+   fa.nii.gz -- fractional anisotropy
+   ra.nii.gz -- relative anisotropy
+   vr.nii.gz -- volume ratio
+   ivc.nii.gz -- intervoxel correlation
+   lowb.nii.gz -- Low B 
    bvals.dat -- bvalues
    bvecs.dat -- directions
    Also creates glm-related images: 
-     beta.nii - regression coefficients
-     eres.nii - residual error (log of dwi intensity)
-     rvar.nii - residual variance (log)
-     rstd.nii - residual stddev (log)
-     dwires.nii - residual error (dwi intensity)
-     dwirvar.nii - residual variance (dwi intensity)
+     beta.nii.gz - regression coefficients
+     eres.nii.gz - residual error (log of dwi intensity)
+     rvar.nii.gz - residual variance (log)
+     rstd.nii.gz - residual stddev (log)
+     dwires.nii.gz - residual error (dwi intensity)
+     dwirvar.nii.gz - residual variance (dwi intensity)
 4. Registration of lowb to same-subject anatomical using
-   FSLs flirt (creates mask.nii and register.dat)
-5. Map FA to talairach space (creates fa-tal.nii)
+   bbregister (creates mask.nii.gz and register.dat)
+5. Map FA to talairach space (creates fa-tal.nii.gz)
 
 Example usage:
 
 dt_recon --i 6-1025.dcm --s M87102113 --o dti
-dt_recon --i f.nii --b f.bvals f.bvecs --s M87102113 --o dti
+dt_recon --i f.nii.gz --b f.bvals f.bvecs --s M87102113 --o dti
 
 # Check registration
-tkregister2 --mov dti/lowb.nii --reg dti/register.dat \
+tkregister2 --mov dti/lowb.nii.gz --reg dti/register.dat \
   --surf orig --tag
 
 # View FA on the subject's anat:
-tkmedit  M87102113 orig.mgz -overlay dti/fa.nii \
+tkmedit  M87102113 orig.mgz -overlay dti/fa.nii.gz \
    -overlay-reg dti/register.dat
 
 # View FA on fsaverage
-tkmedit fsaverage orig.mgz -overlay dti/fa-tal.nii
+tkmedit fsaverage orig.mgz -overlay dti/fa-tal.nii.gz
 
 # Group/Higher level GLM analysis:
 # Concatenate fa from individuals into one file
 #  Make sure the order agrees with the fsgd below
-mri_concat */fa-tal.nii --o group-fa-tal.nii
+mri_concat */fa-tal.nii.gz --o group-fa-tal.nii.gz
 # Create a mask:
-mri_concat */mask-tal.nii --o group-masksum-tal.nii --mean
-mri_binarize --i group-masksum-tal.nii --min .999 --o group-mask-tal.nii
+mri_concat */mask-tal.nii.gz --o group-masksum-tal.nii.gz --mean
+mri_binarize --i group-masksum-tal.nii.gz --min .999 --o group-mask-tal.nii.gz
 # GLM Fit
-mri_glmfit --y group-fa-tal.nii --mask group-mask-tal.nii\
+mri_glmfit --y group-fa-tal.nii.gz --mask group-mask-tal.nii.gz\
     --fsgd your.fsgd --C contrast --glmdir groupanadir
 

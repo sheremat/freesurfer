@@ -6,9 +6,9 @@
 /*
  * Original Author: Ruopeng Wang
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/03/14 23:44:47 $
- *    $Revision: 1.23 $
+ *    $Author: rpwang $
+ *    $Date: 2012/09/04 18:50:45 $
+ *    $Revision: 1.27 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -39,7 +39,8 @@
 
 Interactor2DVolumeEdit::Interactor2DVolumeEdit( const QString& layerTypeName, QObject* parent ) :
   Interactor2D( parent ),
-  m_bEditing( false )
+  m_bEditing( false ),
+  m_bColorPicking( false )
 {
   m_strLayerTypeName = layerTypeName;
 }
@@ -68,51 +69,71 @@ bool Interactor2DVolumeEdit::ProcessMouseDownEvent( QMouseEvent* event, RenderVi
     LayerVolumeBase* mri = ( LayerVolumeBase* )lc->GetActiveLayer();
     if ( (!mri || !mri->IsVisible()) ) //&& ( event->ControlDown() || m_nAction == EM_Polyline ) )
     {
-      emit Error( "LayerNotVisible", mri );
+      emit Error( "Layer Not Visible", mri );
     }
     else if ( !mri->IsEditable() ) //&& ( event->ControlDown() || m_nAction == EM_Polyline ) )
     {
-      emit Error( "LayerNotEditable", mri );
+      emit Error( "Layer Not Editable", mri );
     }
     else if ( m_strLayerTypeName == "MRI" && ((LayerMRI*)mri)->IsTransformed() )
     {
-      emit Error( "LayerNotEditableForTransformation", mri );
+      emit Error( "Layer Not Editable For Transformation", mri );
     }
     else
     {
       m_nMousePosX = event->x();
       m_nMousePosY = event->y();
+      bool bFill3D = (LayerMRI*)MainWindow::GetMainWindow()->GetBrushProperty()->GetFill3D();
 
       double ras[3];
       view->MousePositionToRAS( m_nMousePosX, m_nMousePosY, ras );
       bool bCondition = !(event->modifiers() & Qt::ShiftModifier) && !(event->buttons() & Qt::RightButton);
-      if ( m_nAction == EM_Freehand ) //&& ( event->ControlDown() ) )
+      if ( (m_nAction == EM_ColorPicker || m_bColorPicking ) && mri->IsTypeOf( "MRI" ) )
       {
-        mri->SaveForUndo( view->GetViewPlane() );
         if ( event->modifiers() & CONTROL_MODIFIER )
         {
-          mri->FloodFillByRAS( ras, view->GetViewPlane(), bCondition );
+          mri->SaveForUndo(bFill3D ? -1 : view->GetViewPlane());
+          mri->FloodFillByRAS( ras, view->GetViewPlane(), bCondition, bFill3D );
         }
         else
         {
+          double dValue = ((LayerMRI*)mri)->GetVoxelValue( ras );
+          if ( dValue != 0 )
+          {
+            mri->SetFillValue( (float)dValue );
+          }
+        }
+        m_bColorPicking = false;
+      }
+      else if ( m_nAction == EM_Freehand ) //&& ( event->ControlDown() ) )
+      {
+        if ( event->modifiers() & CONTROL_MODIFIER )
+        {
+          mri->SaveForUndo( bFill3D ? -1 : view->GetViewPlane());
+          mri->FloodFillByRAS( ras, view->GetViewPlane(), bCondition, bFill3D );
+        }
+        else
+        {
+          mri->SaveForUndo( view->GetViewPlane() );
           m_bEditing = true;
           mri->SetVoxelByRAS( ras, view->GetViewPlane(),bCondition );
         }
       }
       else if ( m_nAction == EM_Fill ) //&& ( event->ControlDown() ) )
       {
-        mri->SaveForUndo( view->GetViewPlane() );
-        mri->FloodFillByRAS( ras, view->GetViewPlane(), bCondition );
+        mri->SaveForUndo(bFill3D ? -1 : view->GetViewPlane());
+        mri->FloodFillByRAS( ras, view->GetViewPlane(), bCondition, bFill3D );
       }
       else if ( m_nAction == EM_Polyline || m_nAction == EM_Livewire )
       {
-        mri->SaveForUndo( view->GetViewPlane() );
         if ( event->modifiers() & CONTROL_MODIFIER )
         {
-          mri->FloodFillByRAS( ras, view->GetViewPlane(), bCondition );
+          mri->SaveForUndo(bFill3D ? -1 : view->GetViewPlane());
+          mri->FloodFillByRAS( ras, view->GetViewPlane(), bCondition, bFill3D );
         }
         else
         {
+          mri->SaveForUndo( view->GetViewPlane() );
           m_bEditing = true;
           double ras2[3];
           view->GetCursor2D()->ClearInterpolationPoints();
@@ -142,28 +163,12 @@ bool Interactor2DVolumeEdit::ProcessMouseDownEvent( QMouseEvent* event, RenderVi
           view->grabMouse();
         }
       }
-      else if ( m_nAction == EM_ColorPicker && mri->IsTypeOf( "MRI" ) )
-      {
-        if ( event->modifiers() & CONTROL_MODIFIER )
-        {
-          mri->SaveForUndo( view->GetViewPlane() );
-          mri->FloodFillByRAS( ras, view->GetViewPlane(), bCondition );
-        }
-        else
-        {
-          double dValue = ((LayerMRI*)mri)->GetVoxelValue( ras );
-          if ( dValue != 0 )
-          {
-            mri->SetFillValue( (float)dValue );
-          }
-        }
-      }
       else if ( m_nAction == EM_Contour && mri->IsTypeOf( "MRI" ) )
       {
         LayerMRI* mri_ref = (LayerMRI*)MainWindow::GetMainWindow()->GetBrushProperty()->GetReferenceLayer();
         if ( !mri_ref )
         {
-          emit Error( "LayerReferenceNotSet" );
+          emit Error( "Reference Layer Not Set" );
           return false;
         }
 
@@ -267,10 +272,6 @@ bool Interactor2DVolumeEdit::ProcessMouseUpEvent( QMouseEvent* event, RenderView
       m_bEditing = false;
     }
 
-    LayerCollection* lc = MainWindow::GetMainWindow()->GetLayerCollection( m_strLayerTypeName );
-    LayerVolumeBase* mri = ( LayerVolumeBase* )lc->GetActiveLayer();
-//   mri->SendBroadcast( "LayerEdited", mri );
-
     return false;
   }
   else
@@ -371,6 +372,16 @@ bool Interactor2DVolumeEdit::ProcessKeyDownEvent( QKeyEvent* event, RenderView* 
     view->RequestRedraw();
     return false;
   }
+  else if (event->modifiers() & Qt::ShiftModifier && event->key() == Qt::Key_C)
+  {
+    m_bColorPicking = true;
+    return false;
+  }
+  else if (event->key() == Qt::Key_Escape)
+  {
+    m_bColorPicking = false;
+    return false;
+  }
 
   if ( !m_bEditing )
   {
@@ -426,7 +437,7 @@ void Interactor2DVolumeEdit::UpdateCursor( QEvent* event, QWidget* wnd )
       {
         wnd->setCursor( CursorFactory::CursorFill );
       }
-      else if ( m_nAction == EM_ColorPicker )
+      else if ( m_nAction == EM_ColorPicker || m_bColorPicking )
       {
         wnd->setCursor( CursorFactory::CursorColorPicker );
       }

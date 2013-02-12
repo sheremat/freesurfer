@@ -7,9 +7,9 @@
 /*
  * Original Author: REPLACE_WITH_FULL_NAME_OF_CREATING_AUTHOR 
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/03/02 00:04:10 $
- *    $Revision: 1.12 $
+ *    $Author: fischl $
+ *    $Date: 2012/06/04 16:45:19 $
+ *    $Revision: 1.16 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -28,15 +28,19 @@
 #define VOXLIST_H
 
 #include "mri.h"
-
+#include "label.h"
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
 
+#define VOXLIST_NORMAL   0
+#define VOXLIST_SPLINE   1
+
 typedef struct
 {
+  int     type ;  // one of the types above. 
   int     *xi ;
   int     *yi ;
   int     *zi ;
@@ -49,11 +53,17 @@ typedef struct
   MRI     *mri2;
   MRI     *mri_grad;
   int     nvox ;
+  int     max_vox ;
   double  mean;
   double  std;
+  float   *mx ;
+  float   *my ;
+  float   *mz ;  // slopes for splines
+  float   *t ;   // parameterization along total curve
 }
 VOXEL_LIST, VOXLIST ;
 
+VOXEL_LIST *VLSTfromMRI(MRI *mri, int vno) ;
 VOXEL_LIST *VLSTalloc(int nvox) ;
 VOXEL_LIST *VLSTcopy(VOXEL_LIST *vl_src, VOXEL_LIST *vl_dst, int start_index, int num) ;
 MRI         *VLSTtoMri(VOXEL_LIST *vl, MRI *mri) ;
@@ -71,11 +81,38 @@ MRI         *VLSTaddToMri(VOXEL_LIST *vl, MRI *mri, int val) ;
 VOXEL_LIST  *VLSTdilate(VOXEL_LIST *vl, int mode, MRI *mri_exclude) ;
 void VLSTcomputeStats(VOXEL_LIST *vl);
 VOXEL_LIST *VLSTsort(VOXEL_LIST *vl_src, VOXEL_LIST *vl_dst) ;
+int         VLSTaddUnique(VOXEL_LIST *vl, int x, int y, int z, float xd, float yd, float zd);
+int         VLSTinList(VOXEL_LIST *vl, int x, int y, int z);
+int         VLSTadd(VOXEL_LIST *vl, int x, int y, int z, float xd, float yd, float zd) ;
+
+int         VLSTwriteLabel(VOXEL_LIST *vl, char *fname, MRI_SURFACE *mris, MRI *mri) ;
+LABEL       *VLSTtoLabel(VOXEL_LIST *vl, MRI_SURFACE *mris, MRI *mri) ;
+MRI         *VLSTwriteOrderToMRI(VOXEL_LIST *vl, MRI *mri) ;
+
 
 #define VL_DILATE_ADD      0
 #define VL_DILATE_REPLACE  1
 
 
+// spline stuff see http://en.wikipedia.org/wiki/Cubic_Hermite_spline#Catmull.E2.80.93Rom_spline
+#define h00(t)   ((1+2*t)*SQR(1-t))
+#define h10(t)   (t*SQR(1-t))
+#define h01(t)   (t*t*(3-2*t))
+#define h11(t)   (t*t*(t-1))
+#define X_to_t(xk, xkp1, x)   (((x)-(xk)) / ((xkp1)-(xk)))
+#define t_to_X(xk, xkp1, x)   ((t) * ((xkp1)-(xk)) + (xk))
+
+
+VOXEL_LIST  *VLSTsplineFit(VOXEL_LIST *vl, int num_control) ;
+VOXEL_LIST  *VLSTinterpolate(VOXEL_LIST *vl, float spacing) ;
+int         VLSTinterpolateIntoVolume(VOXEL_LIST *vl, MRI *mri, float val) ;
+double      VLSTcomputeEntropy(VOXEL_LIST *vl, MRI *mri, int num) ;
+int         VLSTinterpolateSplineIntoVolume(VOXEL_LIST *vl, MRI *mri, double spacing, VOXEL_LIST *vl_total, float val) ;
+VOXEL_LIST  *VLSTcopyInto(VOXEL_LIST *vl_src, VOXEL_LIST *vl_dst, int start_dst_index, int num);
+
+double VLSTcomputeSplineMean(VOXEL_LIST *vl_spline, MRI *mri, double step_size)  ;
+double VLSTcomputeSplineSegmentMean(VOXEL_LIST *vl_spline, MRI *mri, double step_size, int start, int stop)  ;
+float VLSTcomputeSplineMedian(VOXEL_LIST *vl_spline, MRI *mri, double step_size) ;
 
 #if defined(__cplusplus)
 };

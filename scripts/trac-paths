@@ -7,9 +7,9 @@
 #
 # Original Author: Anastasia Yendiki
 # CVS Revision Info:
-#    $Author: nicks $
-#    $Date: 2011/05/09 19:36:45 $
-#    $Revision: 1.14.2.3 $
+#    $Author: ayendiki $
+#    $Date: 2012/11/20 16:56:26 $
+#    $Revision: 1.31 $
 #
 # Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
 #
@@ -25,7 +25,7 @@
 
 umask 002
 
-set VERSION = '$Id: trac-paths,v 1.14.2.3 2011/05/09 19:36:45 nicks Exp $'
+set VERSION = '$Id: trac-paths,v 1.31 2012/11/20 16:56:26 ayendiki Exp $'
 set ProgName = `basename $0`
 set inputargs = ($argv)
 
@@ -166,7 +166,7 @@ echo "$0 $argv" |& tee -a $LF |& tee -a $CF
 echo "#-------------------------------------" |& tee -a $LF
 echo "#@# Path reconstruction `date`" |& tee -a $LF
 
-set cvswarp = combined_to${cvstemp}_elreg_afteraseg-norm
+set cvswarp = final_CVSmorph_to$cvstemp
 
 set xspacelist = ()
 if ($doregmni) set xspacelist = ($xspacelist mni)
@@ -183,7 +183,6 @@ foreach ntrain ($ntrainlist)
     foreach reg ($reglist)
       foreach ncpts ($ncptlist)
         set avgmode = $avgname${ntrain}_${xspace}_$reg
-        set mnimode = $avgname${ntrain}_mni_$reg
 
         set outdir = $dtdir/dpath
 
@@ -192,13 +191,15 @@ foreach ntrain ($ntrainlist)
 
           if ($dosegprior) then
             set outdir = $outdir/seg14
-          else if ($doprior) then
-            set outdir = $outdir/man
+          else if ($doxyzprior) then
+            set outdir = $outdir/xyz
+          else if ($dotangprior) then
+            set outdir = $outdir/tang
           else
             set outdir = $outdir/noprior
           endif
 
-          set outdir = $outdir/initmni/reg$reg
+          set outdir = $outdir/init$xspace/reg$reg
         endif
 
         mkdir -p $outdir
@@ -212,13 +213,13 @@ foreach ntrain ($ntrainlist)
           `printf "$labdir/$xspace/%s_${avgmode}_end2_dil.nii.gz " $pathlist`
 
         set initlist = \
-          `printf "$labdir/diff/%s_${mnimode}_cpts_$ncpts.txt " $pathlist`
+          `printf "$labdir/diff/%s_${avgmode}_cpts_$ncpts.txt " $pathlist`
 
         set priorlist = ()
         foreach pathname ($pathlist)
           set priorlist = ($priorlist \
-            $labdir/$xspace/${pathname}_${avgmode}_logprior_0.nii.gz \
-            $labdir/$xspace/${pathname}_${avgmode}_logprior_1.nii.gz)
+            $labdir/$xspace/${pathname}_${avgmode}_logprior_str_0.nii.gz \
+            $labdir/$xspace/${pathname}_${avgmode}_logprior_str_1.nii.gz)
         end
 
         set npriorlist = ()
@@ -243,13 +244,34 @@ foreach ntrain ($ntrainlist)
           set lpriorlist = `printf "%s_all " $lpriorlist`
         endif
 
-        set sdplist = \
-          `printf "$labdir/diff/%s_${mnimode}_cpts_${ncpts}_std.txt " $pathlist`
+        set tpriorlist = `printf \
+          "$labdir/$xspace/%s_${avgmode}_tangprior.txt " $pathlist`
+        set cpriorlist = `printf \
+          "$labdir/$xspace/%s_${avgmode}_curvprior.txt " $pathlist`
 
-        # Clean up pre-existing directories
-        foreach dname ($outlist)
-          rm -rf $dname
-        end
+        if ($usetrunc) then
+          set tpriorlist = `echo $tpriorlist | sed 's/\.txt/_all\.txt/'`
+          set cpriorlist = `echo $cpriorlist | sed 's/\.txt/_all\.txt/'`
+        endif
+
+        set sdplist = \
+          `printf "$labdir/diff/%s_${avgmode}_cpts_${ncpts}_std.txt " $pathlist`
+
+        if ($overwrite) then		# Clean up pre-existing directories
+          foreach dname ($outlist)
+            rm -rf $dname
+          end
+        else				# Rename pre-existing directories
+          foreach dname ($outlist)
+            if (-e $dname) then
+              @ vno = 0
+              while (-e $dname.v$vno)
+                @ vno = $vno + 1
+              end
+              mv $dname $dname.v$vno
+            endif
+          end
+        endif
 
         set brainmask = $labdir/diff/lowb_brain_mask.nii.gz
 
@@ -268,7 +290,7 @@ foreach ntrain ($ntrainlist)
         set cmd = ($cmd --bval $dwidir/bvals)
         set cmd = ($cmd --mask $brainmask)
         set cmd = ($cmd --bpdir $dtdir/dmri.bedpostX)
-        set cmd = ($cmd --ntr 2)
+        set cmd = ($cmd --ntr  $nstick)
         set cmd = ($cmd --fmin $fmin)
         set cmd = ($cmd --roi1 $roi1list)
         set cmd = ($cmd --roi2 $roi2list)
@@ -285,8 +307,11 @@ foreach ntrain ($ntrainlist)
           set cmd = ($cmd --nprior $npriorlist)
           set cmd = ($cmd --lprior $lpriorlist)
           set cmd = ($cmd --seg    $labdir/$xspace/aparc+aseg.nii.gz)
-        else if ($doprior) then
+        else if ($doxyzprior) then
           set cmd = ($cmd --prior $priorlist)
+        else if ($dotangprior) then
+          set cmd = ($cmd --tprior $tpriorlist)
+          set cmd = ($cmd --cprior $cpriorlist)
         endif
         set cmd = ($cmd --nb $nburnin --ns $nsample --nu $nupdate --nk $nkeep)
         if ($doinitprop) then
@@ -329,16 +354,18 @@ foreach ntrain ($ntrainlist)
           endif
         end
 
-        set cmd = $trcdir/dmri_mergepaths
-        set cmd = ($cmd --indir $outdir)
-        set cmd = ($cmd --in    $mergelist)
-        set cmd = ($cmd --out   $outdir/merged_$avgmode.mgz)
-        set cmd = ($cmd --ctab  $FREESURFER_HOME/FreeSurferColorLUT.txt)
-        set cmd = ($cmd --thresh .15)
-        echo $cmd |& tee -a $LF |& tee -a $CF
-        if ($RunIt) then
-          $cmd |& tee -a $LF
-          if ($status) goto error_exit
+        if ($#mergelist) then
+          set cmd = $trcdir/dmri_mergepaths
+          set cmd = ($cmd --indir $outdir)
+          set cmd = ($cmd --in    $mergelist)
+          set cmd = ($cmd --out   $outdir/merged_$avgmode.mgz)
+          set cmd = ($cmd --ctab  $FREESURFER_HOME/FreeSurferColorLUT.txt)
+          set cmd = ($cmd --thresh .15)
+          echo $cmd |& tee -a $LF |& tee -a $CF
+          if ($RunIt) then
+            $cmd |& tee -a $LF
+            if ($status) goto error_exit
+          endif
         endif
       end
     end

@@ -14,9 +14,9 @@
 /*
  * Original Author: Rudolph Pienaar
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.11 $
+ *    $Author: rudolph $
+ *    $Date: 2013/01/29 16:57:40 $
+ *    $Revision: 1.14 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -532,10 +532,11 @@ C_SMessage::syslog_prepend() {
     stringstream        sstream("");
     string              str_hostname("");
     char                pch_buffer[65536];
-    int                 ret                     = 0;
+    //int                 ret                     = 0;
 
     try {
-        ret = gethostname(pch_buffer, 65536);
+        //ret = gethostname(pch_buffer, 65536);
+        gethostname(pch_buffer, 65536);
         str_hostname = pch_buffer;
     } catch (...) {
         str_hostname = "";
@@ -715,6 +716,24 @@ C_SMessage::file_changeTo(
     return true;
 }
 
+int
+C_SMessage::printf(const char* format, ...) {
+    char        pch_buffer[65536];
+    int         ret             = 0;
+    va_list     vp_arg;
+    string      str_syslog      = "";
+    string      str_buffer      = "";
+    
+    va_start(vp_arg, format);
+    vsnprintf(pch_buffer, 65536, format, vp_arg);
+    va_end(vp_arg);
+    if(b_canPrint) {
+        str_buffer      = pch_buffer;
+        ret             = fprintf(pFILE_out, "%s", str_buffer.c_str());
+    }
+    fflush(pFILE_out);
+    return ret;
+}
 
 int
 C_SMessage::lprintf(const char* format, ...) {
@@ -735,7 +754,7 @@ C_SMessage::lprintf(const char* format, ...) {
             str_buffer      = pch_buffer;
         ret = fprintf(pFILE_out, "%-*s", lw, str_buffer.c_str());
     }
-    fflush(stdout);
+    fflush(pFILE_out);
     return ret;
 }
 
@@ -908,6 +927,6 @@ C_SMessage::colprintf(
         } else
             retrw =  fprintf(pFILE_out, "%-*s", rw, pch_buffer);
     }
-    fflush(stdout);
+    fflush(pFILE_out);
     return retlw + retrw;
 }

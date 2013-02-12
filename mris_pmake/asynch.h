@@ -7,9 +7,9 @@
 /*
  * Original Author: Rudolph Pienaar / Christian Haselgrove
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.4 $
+ *    $Author: rudolph $
+ *    $Date: 2012/07/05 21:21:28 $
+ *    $Revision: 1.7 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -105,6 +105,7 @@ asynchEvent_processVERTEX(
   string    astr_comms
 );
 
+#if 0
 /// \fn void asynchEvent_processDWGHT(s_env& st_env, string str_comms)
 /// \brief Process socket-based access to the Dweight structure
 /// \param ast_env   Core simulation environment
@@ -126,6 +127,7 @@ asynchEvent_processWGHT(
   s_env&    ast_env,
   string    astr_comms
 );
+#endif
 
 /// \fn void asynchEvent_processENV(s_env& st_env, string str_comms)
 /// \brief Process socket-based access to the core problem environment
@@ -166,6 +168,19 @@ pC_pathFind_cast(
     C_mpmProg*                  pmpm,
     C_mpmProg_pathFind*&        pC_mpmProg_pathFind
 );
+
+C_mpmProg_ROI*
+pC_ROI_cast(
+    C_mpmProg*                  pmpm,
+    C_mpmProg_ROI*&             pC_mpmProg_ROI
+);
+
+C_mpmProg_externalMesh*
+pC_externalMesh_cast(
+    C_mpmProg*                  pmpm,
+    C_mpmProg_externalMesh*&	pC_mpmProg_exernalMesh
+);
+
 
 #endif //__ASYNCH_H__
 

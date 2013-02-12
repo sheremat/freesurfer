@@ -7,8 +7,8 @@
  * Original Author: Douglas N. Greve
  * CVS Revision Info:
  *    $Author: greve $
- *    $Date: 2011/05/05 15:29:51 $
- *    $Revision: 1.54.2.1 $
+ *    $Date: 2011/05/05 15:28:03 $
+ *    $Revision: 1.55 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -93,7 +93,7 @@ static char *getstem(char *bfilename);
 
 int main(int argc, char *argv[]) ;
 
-static char vcid[] = "$Id: mris_glm.c,v 1.54.2.1 2011/05/05 15:29:51 greve Exp $";
+static char vcid[] = "$Id: mris_glm.c,v 1.55 2011/05/05 15:28:03 greve Exp $";
 const char *Progname = "mris_glm";
 
 char *hemi        = NULL;
@@ -220,7 +220,7 @@ int main(int argc, char **argv) {
 
   /* rkt: check for and handle version tag */
   nargs = handle_version_option (argc, argv,
-                                 "$Id: mris_glm.c,v 1.54.2.1 2011/05/05 15:29:51 greve Exp $", "$Name: stable5 $");
+                                 "$Id: mris_glm.c,v 1.55 2011/05/05 15:28:03 greve Exp $", "$Name:  $");
   if (nargs && argc - nargs == 1)
     exit (0);
   argc -= nargs;

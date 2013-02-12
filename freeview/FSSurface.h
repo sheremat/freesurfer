@@ -7,8 +7,8 @@
  * Original Author: Ruopeng Wang
  * CVS Revision Info:
  *    $Author: rpwang $
- *    $Date: 2011/05/13 15:04:31 $
- *    $Revision: 1.32.2.2 $
+ *    $Date: 2012/10/31 20:10:11 $
+ *    $Revision: 1.40 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -101,7 +101,8 @@ public:
 
   bool LoadSurface    ( const QString& filename, int nSet );
   bool LoadCurvature  ( const QString& filename = NULL );
-  bool LoadOverlay    ( const QString& filename );
+  bool LoadOverlay    ( const QString& filename, const QString& fn_reg,
+                        float** data_out, int* nvertices_out, int* nframes_out );
 
   bool IsSurfaceLoaded( int nSet )
   {
@@ -183,9 +184,15 @@ public:
   void UpdateVector2D( int nPlane, double slice_pos,
                        vtkPolyData* contour_polydata = NULL );
 
-  void Reposition( FSVolume* volume, int target_vnos, double target_val, int nsize, double sigma );
+  void Reposition( FSVolume* volume, int target_vnos, double target_val, int nsize, double sigma, int flags = 0 );
 
-  void Reposition( FSVolume* volume, int target_vnos, double* coord, int nsize, double sigma );
+  void Reposition( FSVolume* volume, int target_vnos, double* coord, int nsize, double sigma, int flags = 0 );
+
+  void RepositionVertex( int vno, double* coord );
+
+  bool Smooth(int nMethod, int niters, double lambda, double k_cutoff);
+
+  void RemoveIntersections();
 
   void UndoReposition();
 
@@ -220,6 +227,8 @@ protected:
                              vtkCellArray* contour_lines,
                              double* pt_out );
 
+  void PostEditProcess();
+
   MRIS*   m_MRIS;
   MRIS*   m_MRISTarget;
 
@@ -236,6 +245,7 @@ protected:
   vtkSmartPointer<vtkPolyData> m_polydataVertices;
   vtkSmartPointer<vtkPolyData> m_polydataWireframes;
   vtkSmartPointer<vtkPolyData> m_polydataVector2D[3];
+  vtkSmartPointer<vtkPolyData> m_polydataVertex2D[3];
   vtkSmartPointer<vtkPolyData> m_polydataTarget;
 
   // Hash table so we can look up vertices. Uses v->x,y,z.

@@ -26,9 +26,9 @@
 /*
  * Original Author: Doug Greve
  * CVS Revision Info:
- *    $Author: jonp $
- *    $Date: 2011/03/05 01:11:14 $
- *    $Revision: 1.63 $
+ *    $Author: greve $
+ *    $Date: 2012/08/28 14:09:49 $
+ *    $Revision: 1.67 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -82,7 +82,7 @@ static int  singledash(char *flag);
 int main(int argc, char *argv[]) ;
 
 static char vcid[] = 
-"$Id: mri_vol2surf.c,v 1.63 2011/03/05 01:11:14 jonp Exp $";
+"$Id: mri_vol2surf.c,v 1.67 2012/08/28 14:09:49 greve Exp $";
 
 char *Progname = NULL;
 
@@ -149,6 +149,7 @@ static int debug = 0;
 static int reshape = 0;
 static int reshapefactor = 0;
 static int reshapetarget = 20;
+static int reshape3d = 0;
 
 static MATRIX *Dsrc, *Dsrctmp, *Wsrc, *Fsrc, *Qsrc, *vox2ras;
 
@@ -177,6 +178,7 @@ static float fwhm = 0, gstd = 0;
 static float surf_fwhm = 0, surf_gstd = 0;
 
 static int  srcsynth = 0;
+int srcsynthindex = 0;
 static long seed = -1; /* < 0 for auto */
 static char *seedfile = NULL;
 
@@ -216,8 +218,8 @@ int main(int argc, char **argv) {
   /* rkt: check for and handle version tag */
   nargs = handle_version_option 
     (argc, argv, 
-     "$Id: mri_vol2surf.c,v 1.63 2011/03/05 01:11:14 jonp Exp $", 
-     "$Name: stable5 $");
+     "$Id: mri_vol2surf.c,v 1.67 2012/08/28 14:09:49 greve Exp $", 
+     "$Name:  $");
   if (nargs && argc - nargs == 1)
     exit (0);
   argc -= nargs;
@@ -251,7 +253,7 @@ int main(int argc, char **argv) {
   }
   printf("INFO: float2int code = %d\n",float2int);
 
-  if (srcsynth == 0) {
+  if(srcsynth == 0 && srcsynthindex == 0) {
     /* Load the Source Volume */
     SrcVol =  MRIreadType(srcvolid,srctype);
     if (SrcVol == NULL) {
@@ -263,7 +265,8 @@ int main(int argc, char **argv) {
       SrcVol = MRISeqchangeType(SrcVol,MRI_FLOAT,0,0,0);
     }
     printf("Done loading volume\n");
-  } else {
+  }
+  if(srcsynth){
     /* Synth the Source Volume */
     printf("Synthesizing, seed = %ld\n",seed);
     srand48(seed);
@@ -278,6 +281,15 @@ int main(int argc, char **argv) {
     MRIcopyHeader(mritmp, SrcVol);
     SrcVol->type = MRI_FLOAT;
     MRIfree(&mritmp);
+  }
+  if(srcsynthindex){
+    printf("Synthesizing with index\n");
+    mritmp = MRIreadType(srcvolid,srctype);
+    if (mritmp == NULL) {
+      printf("ERROR: could not read %s as type %d\n",srcvolid,srctype);
+      exit(1);
+    }
+    SrcVol = MRIindexNo(mritmp,NULL);
   }
 
   if (!regheader) {
@@ -702,6 +714,22 @@ int main(int argc, char **argv) {
         printf("INFO: nvertices is prime, cannot reshape\n");
       }
     }
+
+    if (reshape3d) {
+      if(TrgSurfReg->nvertices != 163842) {
+	printf("ERROR: subject must have 163842 vertices to 3d reshape\n");
+	exit(1);
+      }
+      printf("Reshape 3d\n");
+      mritmp = mri_reshape(SurfVals2, 42,47,83,SurfVals2->nframes);
+      if (mritmp == NULL) {
+        printf("ERROR: mri_reshape could not alloc\n");
+        return(1);
+      }
+      MRIfree(&SurfVals2);
+      SurfVals2 = mritmp;
+    }
+
     printf("Writing to %s\n",outfile);
     printf("Dim: %d %d %d\n",
            SurfVals2->width,SurfVals2->height,SurfVals2->depth);
@@ -742,6 +770,9 @@ static int parse_commandline(int argc, char **argv) {
     else if (!strcasecmp(option, "--dontusehash")) UseHash = 0;
     else if (!strcasecmp(option, "--nohash")) UseHash = 0;
     else if (!strcasecmp(option, "--reshape"))    reshape = 1;
+    else if (!strcasecmp(option, "--reshape3d")) {
+      reshape3d = 1;reshape = 0;
+    }
     else if (!strcasecmp(option, "--noreshape"))  reshape = 0;
     else if (!strcasecmp(option, "--no-reshape")) reshape = 0;
     else if (!strcasecmp(option, "--fixtkreg")) fixtkreg = 1;
@@ -1032,6 +1063,10 @@ static int parse_commandline(int argc, char **argv) {
       sscanf(pargv[0],"%ld",&seed);
       srcsynth = 1;
       nargsused = 1;
+    } else if (!strcmp(option, "--srcsynth-index")) {
+      srcsynthindex = 1;
+      interpmethod_string = "nearest";
+      interpmethod = interpolation_code(interpmethod_string);
     } else if (!strcmp(option, "--seedfile")) {
       if (nargc < 1) argnerr(option,1);
       seedfile = pargv[0];
@@ -1070,8 +1105,10 @@ static void print_usage(void) {
   printf("   --surf-fwhm fwhm : smooth output surface (mm)\n");
   printf("\n");
   printf("   --trgsubject target subject (if different than reg)\n");
-  printf("   --hemi       hemisphere (lh or rh) \n");
-  printf("   --surf       target surface (white) \n");
+  printf("   --hemi hemisphere (lh or rh) \n");
+  printf("   --surf target surface (default = white) DO NOT USE 'inflated' \n");
+  printf("      If you want to display on the inflated, sample it on \n");
+  printf("      the white surface, then display it on any surface, including inflated\n");
   printf("   --srcsubject source subject (override that in reg)\n");
   printf("\n");
   printf(" Options for use with --trgsubject\n");
@@ -1106,9 +1143,11 @@ static void print_usage(void) {
   printf(" Other Options\n");
   printf("   --reshape : so dims fit in nifti or analyze\n");
   printf("   --noreshape : do not reshape (default)\n");
+  printf("   --reshape3d : reshape fsaverage (ico7) into 42 x 47 x 83\n");
   printf("   --scale scale : multiply all intensities by scale.\n");
   printf("   --v vertex no : debug mapping of vertex.\n");
   printf("   --srcsynth seed : synthesize source volume\n");
+  printf("   --srcsynth-index : synthesize source volume with volume index no\n");
   printf("   --seedfile fname : save synth seed to fname\n");
   printf("   --sd SUBJECTS_DIR \n");
   printf("   --help      print out information on how to use this program\n");
@@ -1205,8 +1244,11 @@ static void print_help(void) {
     "  --hemi hemisphere : lh = left hemisphere, rh = right hemisphere\n"
     "\n"
     "  --surf surfacename : the surface on which to resample. The default is\n"
-    "    white. It will look for "
+    "  white. It will look for "
     "$SUBJECTS_DIR/subjectname/surf/?h.surfacename\n"
+    "  DO NOT specify 'inflated'. If you want to display on the inflated surface,\n"
+    "  or any other surface, specify 'white' here then display it on any surface,\n"
+    "  including the inflated surface.\n"
     "\n"
     "  --surfreg intersubject registration surface : default (sphere.reg).\n"
     "    This is a representation of a subject's cortical surface after it\n"

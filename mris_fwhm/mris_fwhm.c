@@ -8,8 +8,8 @@
  * Original Author: REPLACE_WITH_FULL_NAME_OF_CREATING_AUTHOR 
  * CVS Revision Info:
  *    $Author: greve $
- *    $Date: 2011/10/17 14:38:21 $
- *    $Revision: 1.30.2.2 $
+ *    $Date: 2012/12/13 18:18:27 $
+ *    $Revision: 1.37 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -148,7 +148,7 @@ static void print_version(void) ;
 static void dump_options(FILE *fp);
 int main(int argc, char *argv[]) ;
 
-static char vcid[] = "$Id: mris_fwhm.c,v 1.30.2.2 2011/10/17 14:38:21 greve Exp $";
+static char vcid[] = "$Id: mris_fwhm.c,v 1.37 2012/12/13 18:18:27 greve Exp $";
 char *Progname = NULL;
 char *cmdline, cwd[2000];
 int debug=0;
@@ -162,6 +162,7 @@ char *inpath=NULL;
 char *outpath=NULL;
 char *sumfile=NULL;
 char *datfile=NULL;
+char *ar1datfile=NULL;
 char tmpstr[2000];
 MRI *InVals=NULL, *mritmp;
 
@@ -204,7 +205,7 @@ int main(int argc, char *argv[]) {
   MRI *ar1=NULL;
   FILE *fp;
 
-  nargs = handle_version_option (argc, argv, vcid, "$Name: stable5 $");
+  nargs = handle_version_option (argc, argv, vcid, "$Name:  $");
   if (nargs && argc - nargs == 1) exit (0);
   argc -= nargs;
   cmdline = argv2cmdline(argc,argv);
@@ -400,6 +401,16 @@ int main(int argc, char *argv[]) {
     fclose(fp);
   }
 
+  if(ar1datfile) {
+    fp = fopen(ar1datfile,"w");
+    if (fp == NULL) {
+      printf("ERROR: opening %s\n",ar1datfile);
+      exit(1);
+    }
+    fprintf(fp,"%lf %lf\n",ar1mn,ar1std);
+    fclose(fp);
+  }
+
   if(outpath) {
     err = MRIwrite(InVals,outpath);
     if(err) exit(1);
@@ -434,7 +445,9 @@ static int parse_commandline(int argc, char **argv) {
     else if (!strcasecmp(option, "--nosynth")) synth = 0;
     else if (!strcasecmp(option, "--no-detrend")) DoDetrend = 0;
     else if (!strcasecmp(option, "--sqr")) DoSqr = 1;
-    else if (!strcasecmp(option, "--smooth-only")) {
+    else if (!strcasecmp(option, "--fast")) setenv("USE_FAST_SURF_SMOOTHER","1",1);
+    else if (!strcasecmp(option, "--no-fast")) setenv("USE_FAST_SURF_SMOOTHER","0",1);
+    else if (!strcasecmp(option, "--smooth-only") || !strcasecmp(option, "--so")) {
       DoDetrend = 0;
       SmoothOnly = 1;
     }
@@ -498,6 +511,11 @@ static int parse_commandline(int argc, char **argv) {
     else if (!strcasecmp(option, "--dat")) {
       if (nargc < 1) CMDargNErr(option,1);
       datfile = pargv[0];
+      nargsused = 1;
+    } 
+    else if (!strcasecmp(option, "--ar1dat")) {
+      if (nargc < 1) CMDargNErr(option,1);
+      ar1datfile = pargv[0];
       nargsused = 1;
     } 
     else if (!strcasecmp(option, "--ar1")) {
@@ -573,6 +591,7 @@ static void print_usage(void) {
   printf("   --sqr : compute square of input before smoothing\n");
   printf("   --sum sumfile\n");
   printf("   --dat datfile (only contains fwhm)\n");
+  printf("   --ar1dat ar1datfile (contains ar1mean ar1std)\n");
   printf("   --ar1 ar1vol : save spatial ar1 as an overlay\n");
   printf("   \n");
   printf("   --fwhm fwhm : apply before measuring\n");

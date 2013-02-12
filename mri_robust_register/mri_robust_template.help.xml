@@ -53,6 +53,8 @@ Important Note: For best performance the input images should all have the same i
       <explanation>output images: map and resample each input to template</explanation>
       <argument>--weights &lt;weights1.mgz&gt; ...</argument>
       <explanation>output weights (outliers) in target space</explanation>
+      <argument>--oneminusw</argument>
+      <explanation>weights (outlier) map will be inverted (0=outlier), as in earlier versions</explanation>
       <argument>--average &lt;#&gt;</argument>
       <explanation>construct template from: 0 Mean, 1 Median (default)</explanation>
       <argument>--inittp &lt;#&gt;</argument>
@@ -113,6 +115,11 @@ Highly Accurate Inverse Consistent Registration: A Robust Approach, M. Reuter, H
 Avoiding Asymmetry-Induced Bias in Longitudinal Image Processing, M. Reuter, B. Fischl.  NeuroImage 57(1):19-21, 2011.
   http://dx.doi.org/10.1016/j.neuroimage.2011.02.076
   http://reuter.mit.edu/papers/reuter-bias11.pdf 
+
+Within-Subject Template Estimation for Unbiased Longitudinal Image Analysis. M. Reuter, N.J. Schmansky, H.D. Rosas, B. Fischl. NeuroImage 61(4):1402-1418, 2012.
+  http://dx.doi.org/10.1016/j.neuroimage.2012.02.084
+  http://reuter.mit.edu/papers/reuter-long12.pdf
+  
   </references>
   <reporting>Report bugs to &lt;freesurfer@nmr.mgh.harvard.edu&gt;</reporting>
 	<see-also>mri_robust_register</see-also>

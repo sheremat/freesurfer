@@ -7,8 +7,8 @@
  * Original Author: Douglas N. Greve
  * CVS Revision Info:
  *    $Author: greve $
- *    $Date: 2011/05/17 03:44:16 $
- *    $Revision: 1.46.2.1 $
+ *    $Date: 2012/03/05 21:43:49 $
+ *    $Revision: 1.50 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -63,7 +63,7 @@ static int  isflag(char *flag);
 int main(int argc, char *argv[]) ;
 
 static char vcid[] =
-"$Id: mri_volsynth.c,v 1.46.2.1 2011/05/17 03:44:16 greve Exp $";
+"$Id: mri_volsynth.c,v 1.50 2012/03/05 21:43:49 greve Exp $";
 
 char *Progname = NULL;
 
@@ -104,6 +104,7 @@ int dendof = 20;
 int AddOffset=0;
 MRI *offset;
 int OffsetFrame=0;
+MRI *mask;
 char *sum2file = NULL;
 int NoOutput = 0;
 MRI_REGION boundingbox;
@@ -118,12 +119,17 @@ char *subject=NULL, *hemi=NULL;
 MRIS *surf;
 int resSpeced=0,dimSpeced=0;
 int NewVoxSizeSpeced=0;
+int DoHSC=0; // force noise to be heteroscedastic
+double HSCMin=0, HSCMax=0;
+int DoTNorm=0;
+int DoAbs=0;
+MRI *fMRIhsynth(MRI *res, MRI *mask, int DoTNorm);
 
 /*---------------------------------------------------------------*/
 int main(int argc, char **argv)
 {
-  int c,r,s;
-  double val;
+  int c,r,s,f;
+  double val,rval;
   FILE *fp;
   MRI *mritmp;
 
@@ -407,6 +413,24 @@ int main(int argc, char **argv)
     }
   }
 
+  if(DoHSC){
+    // This multiplies each frame by a random number
+    // between HSCMin HSCMax to simulate heteroscedastisity
+    printf("Applying HSC %lf %lf\n",HSCMin,HSCMax);
+    for(f=0; f < mri->nframes; f++){
+      rval = (HSCMax-HSCMin)*drand48() + HSCMin;
+      if(debug) printf("%3d %lf\n",f,rval);
+      for(c=0; c < mri->width; c ++){
+	for(r=0; r < mri->height; r ++){
+	  for(s=0; s < mri->depth; s ++){
+	    val = MRIgetVoxVal(mri,c,r,s,f);
+	    MRIsetVoxVal(mri,c,r,s,f,rval*val);
+	  }
+        }
+      }
+    }
+  }
+
   if(AddOffset) {
     printf("Adding offset\n");
     offset = MRIread(tempid);
@@ -429,6 +453,11 @@ int main(int argc, char **argv)
         }
       }
     }
+  }
+
+  if(DoAbs){
+    printf("Computing absolute value\n");
+    MRIabs(mri,mri);
   }
 
   if(!NoOutput){
@@ -477,6 +506,7 @@ static int parse_commandline(int argc, char **argv) {
     if (!strcasecmp(option, "--help"))           print_help() ;
     else if (!strcasecmp(option, "--version"))   print_version() ;
     else if (!strcasecmp(option, "--debug"))     debug = 1;
+    else if (!strcasecmp(option, "--abs"))       DoAbs = 1;
     else if (!strcasecmp(option, "--nogmnnorm")) gmnnorm = 0;
     else if (!strcasecmp(option, "--rescale"))   rescale=1;
     else if (!strcasecmp(option, "--norescale")) rescale=0;
@@ -487,6 +517,13 @@ static int parse_commandline(int argc, char **argv) {
       AddOffset = 1;
       OffsetFrame = -1;
     }
+    else if (!strcmp(option, "--hsc")) {
+      if (nargc < 2) argnerr(option,2);
+      sscanf(pargv[0],"%lf",&HSCMin);
+      sscanf(pargv[1],"%lf",&HSCMax);
+      DoHSC = 1;
+      nargsused = 2;
+    }
     else if (!strcmp(option, "--sum2")) {
       if (nargc < 1) argnerr(option,1);
       sum2file = pargv[0];
@@ -494,6 +531,17 @@ static int parse_commandline(int argc, char **argv) {
       //NoOutput = 1;
       nframes  = 1;
       nargsused = 1;
+    }
+    else if (!strcmp(option, "--hsynth")) {
+      // eres mask DoTnorm out
+      if (nargc < 3) argnerr(option,3);
+      mri = MRIread(pargv[0]);
+      mask = MRIread(pargv[1]);
+      sscanf(pargv[2],"%d",&DoTNorm);
+      mri2 = fMRIhsynth(mri, mask, DoTNorm);
+      MRIwrite(mri2,pargv[3]);
+      exit(0);
+      nargsused = 2;
     }
     else if (!strcmp(option, "--vol") || !strcmp(option, "--o")) {
       if (nargc < 1) argnerr(option,1);
@@ -724,6 +772,8 @@ static void print_usage(void) {
   printf("   --val-a value : set ValA (default 1)\n");
   printf("   --val-b value : set ValB (default 0)\n");
   printf("   --radius voxradius : radius (in voxels) for sphere\n");
+  printf("   --hsc min max : multiply each frame by a random number bet min and max\n");
+  printf("   --abs : compute absolute value\n");
   printf("\n");
   printf(" Other arguments\n");
   printf("   --spike tp : set all values at time point tp to 1e9\n");
@@ -830,6 +880,7 @@ static void dump_options(FILE *fp) {
   fprintf(fp,"pdf   %s\n",pdfname);
   fprintf(fp,"SpikeTP %d\n",SpikeTP);
   fprintf(fp,"DoCurv %d\n",DoCurv);
+  fprintf(fp,"DoAbs  %d\n",DoAbs);
   printf("Diagnostic Level %d\n",Gdiag_no);
 
   return;
@@ -907,3 +958,67 @@ MRI *fMRIsqrt(MRI *mri, MRI *mrisqrt) {
   }
   return(mrisqrt);
 }
+
+/*---------------------------------------------------------------*/
+MRI *fMRIhsynth(MRI *res, MRI *mask, int DoTNorm)
+{
+  int c,r,s,f,nvox;
+  double val;
+  MRI *hsynth, *tvar=NULL;
+  double *svar, svarsum, tstdvox;
+
+  // Compute temporal variance at each voxel
+  if(DoTNorm) tvar = fMRIcovariance(res, 0, -1, mask, NULL);
+
+  // Compute spatial variance at each frame
+  svar = (double *) calloc(res->nframes,sizeof(double));
+  svarsum = 0;
+  for (f=0; f < res->nframes; f++) {
+    svar[f] = 0;
+    nvox = 0;
+    for (c=0; c < res->width; c++) {
+      for (r=0; r < res->height; r++) {
+	for (s=0; s < res->depth; s++) {
+	  if(mask && MRIgetVoxVal(mask,c,r,s,0) == 0) continue;
+          val = MRIgetVoxVal(res,c,r,s,f);
+	  if(DoTNorm){
+	    tstdvox = sqrt(MRIgetVoxVal(tvar,c,r,s,0));
+	    val /= tstdvox;
+	  }
+	  svar[f] += (val*val);
+	  nvox ++;
+        }
+      }
+    }
+    svar[f] /= nvox;
+    svarsum += svar[f];
+  }
+  for (f=0; f < res->nframes; f++) svar[f] /= (svarsum/res->nframes);
+  for (f=0; f < res->nframes; f++) printf("%2d %g\n",f,svar[f]);
+
+  // Synth noise that is both spatially and temporally white and gaussian
+  hsynth = MRIrandn(res->width, res->height, res->depth, res->nframes, 0, 1, NULL);
+  MRIcopyHeader(res,hsynth);
+
+  // Scale by frame. Noise is still independent across 
+  // space and time, but it is no longer homogeneous.
+  for (f=0; f < res->nframes; f++) {
+    for (c=0; c < res->width; c++) {
+      for (r=0; r < res->height; r++) {
+	for (s=0; s < res->depth; s++) {
+	  if(mask && MRIgetVoxVal(mask,c,r,s,0) == 0) {
+	    MRIsetVoxVal(hsynth,c,r,s,f,0);
+	    continue;
+	  }
+          val = MRIgetVoxVal(hsynth,c,r,s,f);
+          val *= sqrt(svar[f]);
+	  MRIsetVoxVal(hsynth,c,r,s,f,val);
+        }
+      }
+    }
+  }
+  free(svar);
+  if(DoTNorm) MRIfree(&tvar);
+  return(hsynth);
+}
+

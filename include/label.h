@@ -9,9 +9,9 @@
 /*
  * Original Author: Bruce Fischl
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/03/02 00:04:09 $
- *    $Revision: 1.48 $
+ *    $Author: fischl $
+ *    $Date: 2012/06/08 20:13:20 $
+ *    $Revision: 1.54 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -30,6 +30,7 @@
 
 #include "minc_volume_io.h"
 #include "matrix.h"
+#include "const.h"
 
 typedef struct
 {
@@ -46,7 +47,7 @@ typedef struct
 {
   int    max_points ;         /* # of points allocated */
   int    n_points ;           /* # of points in area */
-  char   name[100] ;          /* name of label file */
+  char   name[STRLEN] ;       /* name of label file */
   char   subject_name[100] ;  /* name of subject */
   LV     *lv ;                /* labeled vertices */
   General_transform transform ;   /* the next two are from this struct */
@@ -70,6 +71,7 @@ int     LabelToCanonical(LABEL *area, MRI_SURFACE *mris) ;
 int     LabelThreshold(LABEL *area, float thresh) ;
 int     LabelMarkWithThreshold(LABEL *area, MRI_SURFACE *mris, float thresh);
 int     LabelMarkSurface(LABEL *area, MRI_SURFACE *mris) ;
+int     LabelAddToSurfaceMark(LABEL *area, MRI_SURFACE *mris, int mark_to_add)  ;
 int     LabelToOriginal(LABEL *area, MRI_SURFACE *mris) ;
 int     LabelToWhite(LABEL *area, MRI_SURFACE *mris) ;
 int     LabelFromCanonical(LABEL *area, MRI_SURFACE *mris) ;
@@ -123,6 +125,7 @@ int   LabelCopyStatsToSurface(LABEL *area, MRI_SURFACE *mris, int which) ;
 LABEL *LabelFillHoles(LABEL *area_src, MRI_SURFACE *mris, int coords) ;
 LABEL *LabelFillHolesWithOrig(LABEL *area_src, MRI_SURFACE *mris) ;
 LABEL *LabelfromASeg(MRI *aseg, int segcode);
+int   LabelFillVolume(MRI *mri, LABEL *label, int fillval) ;
 
 MATRIX *LabelFitXYZ(LABEL *label, int order);
 LABEL *LabelBoundary(LABEL *label, MRIS *surf);
@@ -131,6 +134,7 @@ LABEL *LabelInFOV(MRI_SURFACE *mris, MRI *mri, float pad) ;
 int   LabelUnassign(LABEL *area) ;
 LABEL *MRISlabelInvert(MRIS *surf, LABEL *label);
 int LabelMaskSurface(LABEL *label, MRI_SURFACE *mris) ;
+int LabelMaskSurfaceVolume(LABEL *label, MRI *mri, float nonmask_val) ;
 
 #include "mrishash.h"
 LABEL   *LabelSphericalCombine(MRI_SURFACE *mris, LABEL *area,
@@ -141,5 +145,7 @@ LABEL   *LabelSphericalCombine(MRI_SURFACE *mris, LABEL *area,
 int LabelCropPosterior(LABEL *area, float anterior_dist) ;
 int LabelCropAnterior(LABEL *area, float anterior_dist) ;
 int LabelCentroid(LABEL *area, MRI_SURFACE *mris, double *px, double *py, double *pz) ;
+int LabelSetVals(MRI_SURFACE *mris, LABEL *area, float fillval) ;
+int LabelAddToMark(LABEL *area, MRI_SURFACE *mris, int val_to_add) ;
 
 #endif

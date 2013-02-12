@@ -6,9 +6,9 @@
 /*
  * Original Author: Rudolph Pienaar / Christian Haselgrove
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.14 $
+ *    $Author: rudolph $
+ *    $Date: 2012/10/19 19:01:35 $
+ *    $Revision: 1.20 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -94,6 +94,16 @@ mpmProg_check(
     b_validMpmProg        	= true;
     st_env.empmProg_current 	= emp_autodijk_fast;
   }
+  if(str_mpmProg == "ROI")
+  {
+    b_validMpmProg              = true;
+    st_env.empmProg_current     = emp_ROI;
+  }
+  if(str_mpmProg == "externalMesh")
+  {
+    b_validMpmProg              = true;
+    st_env.empmProg_current     = emp_externalMesh;
+  }
   return b_validMpmProg;
 }
 
@@ -116,35 +126,45 @@ mpmOverlay_check(
                "you must also specify '--mpmOverlay <mpmOverlayID>'.",
                20);
   }
+  if(str_mpmOverlay == "legacy")
+  {
+    b_validMpmOverlay           = true;
+    st_env.empmOverlay_current  = emo_LEGACY;
+  }
   if(str_mpmOverlay == "NULL")
   {
-    b_validMpmOverlay         = true;
+    b_validMpmOverlay           = true;
     st_env.empmOverlay_current  = emo_NULL;
   }
   if(str_mpmOverlay == "NOP")
   {
-    b_validMpmOverlay         = true;
+    b_validMpmOverlay           = true;
     st_env.empmOverlay_current  = emo_NOP;
   }
   if(str_mpmOverlay == "unity")
   {
-    b_validMpmOverlay         = true;
+    b_validMpmOverlay           = true;
     st_env.empmOverlay_current  = emo_unity;
   }
   if(str_mpmOverlay == "distance")
   {
-    b_validMpmOverlay         = true;
+    b_validMpmOverlay           = true;
     st_env.empmOverlay_current  = emo_distance;
   }
   if(str_mpmOverlay == "euclidean")
   {
-    b_validMpmOverlay         = true;
+    b_validMpmOverlay           = true;
     st_env.empmOverlay_current  = emo_euclidean;
   }
   if(str_mpmOverlay == "fscurvs")
   {
-    b_validMpmOverlay         = true;
+    b_validMpmOverlay           = true;
     st_env.empmOverlay_current  = emo_fscurvs;
+  }
+  if(str_mpmOverlay == "curvature")
+  {
+    b_validMpmOverlay           = true;
+    st_env.empmOverlay_current  = emo_curvature;
   }
 
   return b_validMpmOverlay;
@@ -177,20 +197,29 @@ commandLineOptions_process(
   char*       pch_subjectsDir;
   string      str_subject                     = "";
   string      str_hemi                        = "";
+  int	      port                            = 1701;
 
   string      str_mpmProg                     = "";
   string      str_mpmArgs                     = "-x";
   string      str_mpmOverlay         	      = "";
+  string      str_mpmOverlayArgs              = "-x";
 
   string      str_mainSurfaceFileName         = "inflated";
   string      str_auxSurfaceFileName          = "smoothwm";
   string      str_mainCurvatureFileName       = "smoothwm.H.crv";
   string      str_auxCurvatureFileName        = "sulc";
 
+  st_env.b_primaryCurvature                   = false;
+  st_env.b_secondarySurface                   = false;
+  st_env.b_secondaryCurvature                 = false;
+
+
   if( (pch_subjectsDir = getenv("SUBJECTS_DIR")) == NULL)
     error_exit("processing environment,",
                "it seems that the SUBJECTS_DIR env variable is not set.", 10);
-  str_subjectsDir     = pch_subjectsDir;
+  str_subjectsDir       = pch_subjectsDir;
+  st_env.argc           = argc;
+  st_env.ppch_argv      = ppch_argv;
   while (1)
   {
     int opt;
@@ -239,14 +268,17 @@ commandLineOptions_process(
     case 't':
       str_auxSurfaceFileName          = optarg;
       b_optionsFileUse                = false;
+      st_env.b_secondarySurface       = true;
       break;
     case 'c':
       str_mainCurvatureFileName       = optarg;
       b_optionsFileUse                = false;
+      st_env.b_primaryCurvature       = true;
       break;
     case 'd':
       str_auxCurvatureFileName        = optarg;
       b_optionsFileUse                = false;
+      st_env.b_secondaryCurvature     = true;
       break;
     case 'm':
       str_mpmProg                     = optarg;
@@ -258,11 +290,21 @@ commandLineOptions_process(
       b_optionsFileUse                = false;
       break;
     case 'O':
-      str_mpmOverlay      = optarg;
-      b_optionsFileUse    = false;
+      str_mpmOverlay                    = optarg;
+      st_env.b_mpmOverlayUse            = true;
+      b_optionsFileUse                  = false;
+      break;
+    case 'p':
+      port                              = atoi(optarg);
+      b_optionsFileUse                  = false;
+      break;
+    case 'V':
+      str_mpmOverlayArgs                = optarg;
+      b_optionsFileUse                  = false;
       break;
     default:
       cout << "?? getopt returned character code " << opt << endl;
+      break;
     }
   }
   st_env.str_hemi             = str_hemi;
@@ -271,11 +313,16 @@ commandLineOptions_process(
   while(!st_env.b_optionsFileUse)
   {
     s_env_defaultsSet(st_env);
+    st_env.serverControlPort            = port;
     st_env.b_useAbsCurvs                = b_useAbsCurvs;
-    st_env.str_mainSurfaceFileName      = str_p+str_hemi+"."+str_mainSurfaceFileName;
-    st_env.str_auxSurfaceFileName       = str_p+str_hemi+"."+str_auxSurfaceFileName;
-    st_env.str_mainCurvatureFileName    = str_p+str_hemi+"."+str_mainCurvatureFileName;
-    st_env.str_auxCurvatureFileName     = str_p+str_hemi+"."+str_auxCurvatureFileName;
+    st_env.str_primarySurfaceFileName   = str_p + str_hemi + "." +
+            str_mainSurfaceFileName;
+    st_env.str_secondarySurfaceFileName = str_p + str_hemi + "." +
+            str_auxSurfaceFileName;
+    st_env.str_primaryCurvatureFileName = str_p + str_hemi + "." +
+            str_mainCurvatureFileName;
+    st_env.str_secondaryCurvatureFileName = str_p+str_hemi + "." +
+            str_auxCurvatureFileName;
     if(!mpmProg_check (st_env, str_mpmProg))
     {
       s_env_mpmPrint(st_env,
@@ -299,6 +346,7 @@ commandLineOptions_process(
                  "I didn't recognize the <mpmOverlay>.",
                  20);
     }
+    st_env.str_mpmOverlayArgs               = str_mpmOverlayArgs;
     s_env_optionsFile_write(st_env);
 
     str_asynchComms                         = "HUP";

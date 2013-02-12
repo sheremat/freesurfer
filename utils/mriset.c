@@ -8,9 +8,9 @@
 /*
  * Original Author: Bruce Fischl
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/03/02 00:04:46 $
- *    $Revision: 1.78 $
+ *    $Author: greve $
+ *    $Date: 2012/12/06 18:31:57 $
+ *    $Revision: 1.86 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -396,6 +396,68 @@ MRImorph(MRI *mri_src, MRI *mri_dst, int which)
   }
   return(mri_dst) ;
 }
+/*!
+  \fn MRI *MRIerodeNN(MRI *in, MRI *out, int NNDef)
+  \brief Erodes a mask by one voxel if any of the nearest neighbors of 
+  a voxel are non-zero. Nearest neighbor can be defined in one of three ways:
+  NEAREST_NEIGHBOR_FACE, NEAREST_NEIGHBOR_EDGE, NEAREST_NEIGHBOR_CORNER
+  When called with CORNER, this should give the same result as MRIerode().
+*/
+MRI *MRIerodeNN(MRI *in, MRI *out, int NNDef)
+{
+  int c,r,s,dc,dr,ds;
+  double valmin, val;
+
+  if(in == out){
+    printf("ERROR: MRIerodeNN(): cannot be done in-place\n");
+    return(NULL);
+  }
+  if(!out) {
+    out = MRIallocSequence(in->width, in->height, in->depth,in->type, 1);
+    MRIcopyHeader(in,out);
+  }
+  if(MRIdimMismatch(in, out, 0)){
+    printf("ERROR: MRIerodeNN(): seg/out dim mismatch\n");
+    return(NULL);
+  }
+  MRIsetValues(out, 0);
+
+  for(c=0; c < in->width; c++){
+    for(r=0; r < in->height; r++){
+      for(s=0; s < in->depth; s++){
+	// If this voxel is already 0, just skip it
+	valmin = MRIgetVoxVal(in,c,r,s,0);
+
+	// Check neighboring voxels
+	for(dc=-1; dc <= 1; dc++){
+	  for(dr=-1; dr <= 1; dr++){
+	    for(ds=-1; ds <= 1; ds++){
+	      if(c+dc<0 || c+dc>in->width-1 ||
+		 r+dr<0 || r+dr>in->height-1 ||
+		 s+ds<0 || s+ds>in->depth-1){
+		continue;
+	      }
+	      if(NNDef == NEAREST_NEIGHBOR_FACE)
+		if(abs(dc)+abs(dr)+abs(ds) > 1) continue;
+	      if(NNDef == NEAREST_NEIGHBOR_EDGE)
+		if(abs(dc)+abs(dr)+abs(ds) > 2) continue;
+	      val = MRIgetVoxVal(in,c+dc,r+dr,s+ds,0);
+	      if(val < valmin) valmin = val;
+	    }
+	  }
+	}
+	MRIsetVoxVal(out,c,r,s,0, valmin);
+      }
+    }
+  }
+  return(out);
+}
+
+
+
+
+
+
 /*-----------------------------------------------------*/
 MRI * MRIerode(MRI *mri_src, MRI *mri_dst)
 {
@@ -476,6 +538,117 @@ MRI * MRIerode(MRI *mri_src, MRI *mri_dst)
             }
           }
           *pdst++ = min_val ;
+        }
+      }
+    }
+  }
+  if (same)
+  {
+    MRIcopy(mri_dst, mri_src) ;
+    MRIfree(&mri_dst) ;
+    mri_dst = mri_src ;
+  }
+  return(mri_dst) ;
+}
+
+/*-----------------------------------------------------
+
+Set to zero every voxel where any of the neighbors has 
+a different value (e.g. to erode all labels in aseg)
+
+Not sure if meaningful for float images, maybe add 
+eps check?
+
+-----------------------------------------------------*/
+MRI * MRIerodeLabels(MRI *mri_src, MRI *mri_dst)
+{
+  int     width, height, depth, x, y, z, x0, y0, z0, xi, yi, zi, same ;
+  BUFTYPE *pdst, neighbor ;
+
+  MRIcheckVolDims(mri_src, mri_dst);
+
+  width = mri_src->width ;
+  height = mri_src->height ;
+  depth = mri_src->depth ;
+
+  if (!mri_dst)
+    mri_dst = MRIclone(mri_src, NULL) ;
+
+  if (mri_dst == mri_src)
+  {
+    same = 1 ;
+    mri_dst = MRIclone(mri_src, NULL) ;
+  }
+  else
+    same = 0 ;
+
+  if (mri_src->type != MRI_UCHAR || mri_dst->type != MRI_UCHAR)
+  {
+    double current, neighbor ;
+
+    for (z = 0 ; z < depth ; z++)
+    {
+      for (y = 0 ; y < height ; y++)
+      {
+        for (x = 0 ; x < width ; x++)
+        {
+          current  = MRIgetVoxVal(mri_src, x, y, z, 0) ;
+          neighbor = current;
+          for (z0 = -1 ; z0 <= 1 ; z0++)
+          {
+            zi = mri_src->zi[z+z0] ;
+            for (y0 = -1 ; y0 <= 1 ; y0++)
+            {
+              yi = mri_src->yi[y+y0] ;
+              for (x0 = -1 ; x0 <= 1 ; x0++)
+              {
+                xi = mri_src->xi[x+x0] ;
+                neighbor = MRIgetVoxVal(mri_src, xi,yi,zi, 0) ;
+                if (current != neighbor)
+                {
+                  current = 0.0 ;
+                  x0 = 2;
+                  y0 = 2;
+                  z0 = 2;
+                }
+              }
+            }
+          }
+          MRIsetVoxVal(mri_dst, x, y, z, 0, current) ;
+        }
+      }
+    }
+  }
+  else
+  {
+    for (z = 0 ; z < depth ; z++)
+    {
+      for (y = 0 ; y < height ; y++)
+      {
+        pdst = &MRIvox(mri_dst, 0, y, z) ;
+        for (x = 0 ; x < width ; x++)
+        {
+          for (z0 = -1 ; z0 <= 1 ; z0++)
+          {
+            zi = mri_src->zi[z+z0] ;
+            for (y0 = -1 ; y0 <= 1 ; y0++)
+            {
+              yi = mri_src->yi[y+y0] ;
+              for (x0 = -1 ; x0 <= 1 ; x0++)
+              {
+                xi = mri_src->xi[x+x0] ;
+                neighbor = MRIvox(mri_src, xi,yi,zi) ;
+                if (*pdst != neighbor)
+                {
+                  *pdst = 0 ;
+                  x0 = 2;
+                  y0 = 2;
+                  z0 = 2;
+                }
+              }
+            }
+          }
+          pdst++;
         }
       }
     }
@@ -815,6 +988,191 @@ MRI * MRIerode2D(MRI *mri_src, MRI *mri_dst)
   }
   return(mri_dst) ;
 }
+/*!
+  \fn MRI *MRIerodeSegmentation(MRI *seg, MRI *out, int nErodes, int nDiffThresh)
+  \brief Erodes the boundaries of a segmentation (ie, sets value=0) if the number
+  of nearest neighbor voxels that are different than the center is greater than
+  nDiffThresh. "Nearest neighbor" is defined as the 6 nearest neighbors. If
+  nErodes>1, then it calls itself recursively.
+*/
+MRI *MRIerodeSegmentation(MRI *seg, MRI *out, int nErodes, int nDiffThresh)
+{
+  int c,r,s,dc,dr,ds,segid0,segidD, n, nDiff;
+  MRI *seg2=NULL;
+
+  if(seg == out){
+    printf("ERROR: MRIerodeSegmentation(): cannot be done in-place\n");
+    return(NULL);
+  }
+  if(!out) out = MRIallocSequence(seg->width, seg->height, seg->depth,seg->type, 1);
+  if(MRIdimMismatch(seg, out, 0)){
+    printf("ERROR: MRIerodeSegmentation(): seg/out dim mismatch\n");
+    return(NULL);
+  }
+  out = MRIcopy(seg,out);
+
+  n = nErodes;
+  seg2 = MRIcopy(seg,seg2);
+  while(n != 1) {
+    out = MRIerodeSegmentation(seg2, out, 1, nDiffThresh);
+    seg2 = MRIcopy(out,seg2);
+    n--;
+  }
+
+  for(c=0; c < seg->width; c++){
+    for(r=0; r < seg->height; r++){
+      for(s=0; s < seg->depth; s++){
+	if(c==0 || c==seg->width-1 ||
+	   r==0 || r==seg->height-1 ||
+	   s==0 || s==seg->depth-1){
+	  MRIsetVoxVal(out,c,r,s,0, 0);
+	  continue;
+	}
+	segid0 = MRIgetVoxVal(seg2,c,r,s,0);
+	nDiff = 0;
+	for(dc=-1; dc <= 1; dc++){
+	  segidD = MRIgetVoxVal(seg2,c+dc,r,s,0);
+	  if(segidD != segid0) nDiff++;
+	}
+	for(dr=-1; dr <= 1; dr++){
+	  segidD = MRIgetVoxVal(seg2,c,r+dr,s,0);
+	  if(segidD != segid0) nDiff++;
+	}
+	for(ds=-1; ds <= 1; ds++){
+	  segidD = MRIgetVoxVal(seg2,c,r,s+ds,0);
+	  if(segidD != segid0) nDiff++;
+	}
+	if(nDiff > nDiffThresh) segid0 = 0;
+	MRIsetVoxVal(out,c,r,s,0, segid0);
+      }
+    }
+  }
+  return(out);
+}
+/*!
+  \fn MRI *MRIdilateSegmentation(MRI *seg, MRI *out, int nDils, MRI *mask, int *pnchanges)
+  \brief Dilates the boundaries of a segmentation to nearest neighbors
+  that have a value of 0. If a voxel has neighbors that are different
+  ROIs, then it is set to the most frequently occuring neighbor.
+  "Nearest neighbor" is defined as the 6 nearest neighbors. If
+  nDils>1, then it calls itself recursively. If nDils == -1, then it
+  calls itself recursively until the output segmentation stops
+  changing. If mask is set, then mask must be > 0.5
+*/
+MRI *MRIdilateSegmentation(MRI *seg, MRI *out, int nDils, MRI *mask, int *pnchanges)
+{
+  int c,r,s,dc,dr,ds,segid0,segidD, n;
+  int nNbrs, NbrId[6], segidMost, nOccurances,nchanges;
+  MRI *seg2=NULL;
+  double mval;
+
+  if(seg == out){
+    printf("ERROR: MRIdilateSegmentation(): cannot be done in-place\n");
+    return(NULL);
+  }
+  if(!out) out = MRIallocSequence(seg->width, seg->height, seg->depth,seg->type, 1);
+  if(MRIdimMismatch(seg, out, 0)){
+    printf("ERROR: MRIdilateSegmentation(): seg/out dim mismatch\n");
+    return(NULL);
+  }
+
+  out = MRIcopy(seg,out);
+  seg2 = MRIcopy(seg,seg2);
+
+  // If nDils == -1, this will loop through progressive dilations
+  // until no changes are made. The value of pnchanges becomes the
+  // number of loops needed
+  if(nDils == -1){
+    n = 0;
+    nchanges = 1;
+    while(nchanges){
+      n++;
+      out = MRIdilateSegmentation(seg2, out, 1, mask, &nchanges);
+      seg2 = MRIcopy(out,seg2);
+      printf("  MRIdilateSegmentation(): %2d %5d\n",n,nchanges);
+    }
+    *pnchanges = n; // number of loops
+    MRIfree(&seg2);
+    return(out);
+  }
+
+  // If nDils > 1, loop through progressive dilations
+  n = nDils;
+  while(n != 1) {
+    out = MRIdilateSegmentation(seg2, out, 1, mask, pnchanges);
+    seg2 = MRIcopy(out,seg2);
+    n--;
+  }
+
+  // This is the major loop to assign new voxel values
+  nchanges = 0;
+  for(c=0; c < seg->width; c++){
+    for(r=0; r < seg->height; r++){
+      for(s=0; s < seg->depth; s++){
+	segid0 = MRIgetVoxVal(seg2,c,r,s,0);
+
+	// if it already has a value, dont overwrite
+	if(segid0 != 0) continue;
+
+	// if it is not in the mask, skip it
+	if(mask){
+	  mval = MRIgetVoxVal(mask,c,r,s,0);
+	  if(mval < .5) continue;
+	}
+
+	// Get a list of nearest neighbors. Nearest = shares a face
+	nNbrs = 0;
+	for(dc=-1; dc <= 1; dc++){
+	  if(dc == 0) continue;
+	  if(c + dc < 0) continue;
+	  if(c + dc >= seg->width) continue;
+	  segidD = MRIgetVoxVal(seg2,c+dc,r,s,0);
+	  if(segidD == 0) continue;
+	  NbrId[nNbrs] = segidD;
+	  nNbrs++;
+	}
+	for(dr=-1; dr <= 1; dr++){
+	  if(dr == 0) continue;
+	  if(r + dr < 0) continue;
+	  if(r + dr >= seg->height) continue;
+	  segidD = MRIgetVoxVal(seg2,c,r+dr,s,0);
+	  if(segidD == 0) continue;
+	  NbrId[nNbrs] = segidD;
+	  nNbrs++;
+	}
+	for(ds=-1; ds <= 1; ds++){
+	  if(ds == 0) continue;
+	  if(s + ds < 0) continue;
+	  if(s + ds >= seg->depth) continue;
+	  segidD = MRIgetVoxVal(seg2,c,r,s+ds,0);
+	  if(segidD == 0) continue;
+	  NbrId[nNbrs] = segidD;
+	  nNbrs++;
+	}
+	// Dont change value if no non-zero neighbors
+	if(nNbrs == 0) continue;
+
+	// Find most frequencly occuring neighbor
+	// If a tie, gets the one with the lowest sort number (deterministic)
+	segidMost = most_frequent_int_list(NbrId, nNbrs, &nOccurances);
+
+	// now set the new ID
+	MRIsetVoxVal(out,c,r,s,0, segidMost);
+	nchanges++;
+      }
+    }
+  }
+  //printf("    MRIdilateSegmentation(): nchanges = %d\n",nchanges);
+  *pnchanges = nchanges;
+  MRIfree(&seg2);
+  return(out);
+}
+
+
+
+
+
+
 /*-----------------------------------------------------
   Parameters:
 
@@ -1616,6 +1974,22 @@ MRIdilate(MRI *mri_src, MRI *mri_dst)
   }
   return(mri_dst) ;
 }
+MRI *
+MRIopenN(MRI *mri_src, MRI *mri_dst, int order)
+{
+  MRI *mri_tmp ;
+  int i ;
+
+  mri_tmp = MRIerode(mri_src, NULL) ;
+  for (i = 1 ; i < order ; i++)
+    MRIerode(mri_tmp, mri_tmp) ;
+  mri_dst = MRIdilate(mri_tmp, mri_dst) ;
+  for (i = 1 ; i < order ; i++)
+    MRIdilate(mri_dst, mri_dst) ;
+
+  MRIfree(&mri_tmp) ;
+  return(mri_dst) ;
+}
 /*-----------------------------------------------------
   Parameters:
 
@@ -2050,16 +2424,47 @@ MRIreplaceValueRange(MRI *mri_src, MRI *mri_dst,float low_in_val, float hi_in_va
   }
   return(mri_dst) ;
 }
-/*-----------------------------------------------------
-  Parameters:
+/*!
+  \fn MRI *MRIreplaceList(MRI *seg, int *srclist, int *targlist, int nlist, MRI *out)
+  \brief Replaces a value in the source list with the corresponding value 
+  in the target list. See also MRIreplaceValues().
+*/
+MRI *MRIreplaceList(MRI *seg, int *srclist, int *targlist, int nlist, MRI *out)
+{
+  int c,r,s,n,segid;
 
-  Returns value:
+  if(seg == out){
+    printf("ERROR: MRIreplaceList(): cannot be done in-place\n");
+    return(NULL);
+  }
+  if(!out) out = MRIallocSequence(seg->width, seg->height, seg->depth,seg->type, 1);
+  if(MRIdimMismatch(seg, out, 0)){
+    printf("ERROR: MRIreplaceList(): seg/out dim mismatch\n");
+    return(NULL);
+  }
 
-  Description
-  replace a single value with a specified one
-  ------------------------------------------------------*/
-MRI *
-MRIreplaceValues(MRI *mri_src, MRI *mri_dst, float in_val, float out_val)
+  out = MRIcopy(seg,out);
+  for(c=0; c < seg->width; c++){
+    for(r=0; r < seg->height; r++){
+      for(s=0; s < seg->depth; s++){
+	segid = MRIgetVoxVal(seg,c,r,s,0);
+	for(n = 0; n < nlist; n++){
+	  if(segid == srclist[n]){
+	    MRIsetVoxVal(out,c,r,s,0, targlist[n]);
+	    break;
+	  }
+	}//n
+      }//s
+    }//r
+  }//c
+  return(out);
+}
+
+/*!
+  \fn MRI *MRIreplaceValues(MRI *mri_src, MRI *mri_dst, float in_val, float out_val)
+  \brief Replaces a single value with a specified one. See also MRIreplaceList().
+*/
+MRI *MRIreplaceValues(MRI *mri_src, MRI *mri_dst, float in_val, float out_val)
 {
   int     width, height, depth, x, y, z, frame ;
   float   val ;
@@ -3325,6 +3730,18 @@ MRIlabelInVolume(MRI *mri_src, int label)
 					return(1) ;
 	return(0) ;
 }
+int
+MRIlabeledVoxels(MRI *mri_src, int label)
+{
+	int x, y, z, num ;
+
+	for (num = 0, x = 0 ; x < mri_src->width ; x++)
+		for (y = 0 ; y < mri_src->height ; y++)
+			for (z = 0 ; z < mri_src->depth ; z++)
+				if ((int)MRIgetVoxVal(mri_src, x, y, z, 0) == label)
+					num++ ;
+	return(num) ;
+}
 
 /*!
   \fn MRI *MRIsetBoundingBox(MRI *template, MRI_REGION *region, 
@@ -3917,3 +4334,86 @@ double MRIpercentThresh(MRI *mri, MRI *mask, int frame, double pct)
   return(thresh);
 }
 
+MRI *
+MRIminAbs(MRI *mri_src1, MRI *mri_src2, MRI *mri_dst)
+{
+  int   x, y, z, f ;
+  float val1, val2 ;
+
+  if (mri_dst == NULL)
+    mri_dst = MRIclone(mri_src1, NULL) ;
+
+  for (f = 0 ; f < mri_dst->nframes ; f++)
+    for (x = 0 ; x < mri_dst->width ; x++)
+      for (y = 0 ; y < mri_dst->height ; y++)
+	for (z = 0 ; z < mri_dst->depth ; z++)
+	{
+	  val1 = MRIgetVoxVal(mri_src1, x, y, z, f) ;
+	  val2 = MRIgetVoxVal(mri_src2, x, y, z, f) ;
+	  if (abs(val2) < abs(val1))
+	    val1 = val2 ;
+	  MRIsetVoxVal(mri_dst, x, y, z, f, val1) ;
+	}
+  return(mri_dst) ;
+}
+
+MRI *
+MRImin(MRI *mri1, MRI *mri2, MRI *mri_min)
+{
+  int   x, y, z, f ;
+  float val1, val2 ;
+
+  if (mri_min == NULL)
+    mri_min = MRIclone(mri1, NULL) ;
+
+
+  for (f = 0 ; f < mri1->nframes ; f++)
+    for (x = 0 ; x < mri1->width;  x++)
+      for (y = 0 ; y < mri1->height;  y++)
+	for (z = 0 ; z < mri1->depth;  z++)
+	{
+	  val1 = MRIgetVoxVal(mri1, x, y, z, f) ;
+	  val2 = MRIgetVoxVal(mri2, x, y, z, f) ;
+	  val1 = val2 < val1 ? val2 : val1 ;
+	  MRIsetVoxVal(mri_min, x, y, z, f, val1) ;
+	}
+
+  return(mri_min) ;
+}
+
+int
+MRIcountNonzero(MRI *mri)
+{
+  int  x, y, z, nonzero, f ;
+
+  for (nonzero = f = 0 ; f < mri->nframes ; f++)
+    for (x = 0 ; x < mri->width ; x++)
+      for (y = 0 ; y < mri->height ; y++)
+	for (z = 0 ; z < mri->depth ; z++)
+	  if (MRIgetVoxVal(mri, x, y, z, f) > 0)
+	    nonzero++ ;
+  return(nonzero) ;
+}
+
+int
+MRIcountValInNbhd(MRI *mri, int wsize, int x, int y, int z, int val)
+{
+  int   xk, yk, zk, xi, yi, zi, whalf, total ;
+
+  whalf = (wsize-1)/2 ;
+  for (total = 0, zk = -whalf ; zk <= whalf ; zk++)
+  {
+    zi = mri->zi[z+zk] ;
+    for (yk = -whalf ; yk <= whalf ; yk++)
+    {
+      yi = mri->yi[y+yk] ;
+      for (xk = -whalf ; xk <= whalf ; xk++)
+      {
+        xi = mri->xi[x+xk] ;
+        if ((int)MRIgetVoxVal(mri, xi, yi, zi,0)  == val)
+          total++ ;
+      }
+    }
+  }
+  return(total) ;
+}

@@ -11,9 +11,9 @@
 /*
  * Original Author: Rudolph Pienaar / Christian Haselgrove
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.26 $
+ *    $Author: rudolph $
+ *    $Date: 2013/02/04 19:23:00 $
+ *    $Revision: 1.39 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -33,11 +33,14 @@
 #include "C_mpmOverlay.h"
 #include "asynch.h"
 
+#include "legacy.h"
+
 #include <stdlib.h>
 #include <assert.h>
 
 extern string G_SELF;
 
+#if 0
 void
 s_weights_scan(
   s_weights&  st_costWeight,
@@ -279,6 +282,95 @@ s_Dweights_setAll(
     asw.Dwdch   = af;
     asw.Dwdir   = af;
 }
+#endif
+
+float
+s_env_plyDepth_get(
+    s_env&   ast_env
+) {
+    //
+    // DESC
+    //  The 'plyDepth' is a parameter used by the ROI
+    //  mpmProg, corresponding to the 'f_radius' member
+    //  variable. Getting the plyDepth via a function
+    //  call is safer since the env.plyDepth will be
+    //  depreciated. Moreover, the env.plyDepth is not
+    //  synch'ed with the mpmProg.
+    //
+
+    C_mpmProg_ROI*      pC_ROI;
+    if(!pC_ROI_cast(ast_env.pCmpmProg, pC_ROI))
+        error_exit( "setting plyDepth",
+                    "internal mpmProg is not of type ROI",
+                    20);
+    return pC_ROI->radius_get();
+}
+
+void
+s_env_plyDepth_set(
+    s_env&      ast_env,
+    float       af_val
+) {
+    //
+    // DESC
+    //  The 'plyDepth' is a parameter used by the ROI
+    //  mpmProg, corresponding to the 'f_radius' member
+    //  variable. Setting the plyDepth via a function
+    //  call is safer since the env.plyDepth will be
+    //  depreciated. Moreover, the env.plyDepth is not
+    //  synch'ed with the mpmProg.
+    //
+
+    C_mpmProg_ROI*      pC_ROI;
+    if(!pC_ROI_cast(ast_env.pCmpmProg, pC_ROI))
+        error_exit( "setting plyDepth",
+                    "internal mpmProg is not of type ROI",
+                    20);
+    pC_ROI->radius_set(af_val);
+}
+
+float
+s_env_plyIncrement_get(
+    s_env&   ast_env
+) {
+    //
+    // DESC
+    //  The 'plyIncrement' is a parameter used by the ROI
+    //  mpmProg, and used when creating "staggered" label
+    //  saves. Each successive label save includes points
+    //  corresponding to an additional <af_val> shell about
+    //  a previous label.
+    //
+
+    C_mpmProg_ROI*      pC_ROI;
+    if(!pC_ROI_cast(ast_env.pCmpmProg, pC_ROI))
+        error_exit( "setting plyDepth",
+                    "internal mpmProg is not of type ROI",
+                    20);
+    return pC_ROI->plyIncrement_get();
+}
+
+void
+s_env_plyIncrement_set(
+    s_env&      ast_env,
+    float       af_val
+) {
+    //
+    // DESC
+    //  The 'plyIncrement' is a parameter used by the ROI
+    //  mpmProg, and used when creating "staggered" label
+    //  saves. Each successive label save includes points
+    //  corresponding to an additional <af_val> shell about
+    //  a previous label.
+    //
+
+    C_mpmProg_ROI*      pC_ROI;
+    if(!pC_ROI_cast(ast_env.pCmpmProg, pC_ROI))
+        error_exit( "setting plyDepth",
+                    "internal mpmProg is not of type ROI",
+                    20);
+    pC_ROI->plyIncrement_set(af_val);
+}
 
 void
 s_env_nullify(
@@ -310,15 +402,8 @@ s_env_nullify(
 
     st_env.b_syslogPrepend          = false;
     st_env.b_exitOnDone             = false;
-    st_env.pcsm_stdout              = new C_SMessage( "",
-                                           eSM_raw,
-                                           "stdout",
-                                           eSM_c);
-    st_env.pcsm_stdout->b_syslogPrepend_set(true);
-    st_env.pcsm_stdout->lw_set(st_env.lw);
-    st_env.pcsm_stdout->rw_set(st_env.rw);
-    st_env.pcsm_stdout->b_canPrint_set(true);
     st_env.pcsm_optionsFile         = NULL;
+    st_env.pcsm_stdout              = NULL;
     st_env.pcsm_syslog              = NULL;
     st_env.pcsm_userlog             = NULL;
     st_env.pcsm_resultlog           = NULL;
@@ -339,9 +424,9 @@ s_env_nullify(
     st_env.plyDepth                 = 0;
 
     st_env.pMS_active               = NULL;
-    st_env.pMS_auxSurface           = NULL;
-    st_env.pMS_curvature            = NULL;
-    st_env.pMS_sulcal               = NULL;
+    st_env.pMS_secondary            = NULL;
+    st_env.pMS_primary              = NULL;
+    st_env.pMS_auxillary            = NULL;
 
     st_env.b_useAbsCurvs            = false;
     st_env.b_surfacesKeepInSync     = false;
@@ -349,7 +434,7 @@ s_env_nullify(
     st_env.b_costHistoryPreserve    = false;
     st_env.costFunc_do              = NULL;
 
-    // Define the cost functions for human readable setting / getting
+    // Define the legacy cost functions for human readable setting / getting
     st_env.totalNumFunctions        = 4;
     st_env.ecf_current              = e_default;
     st_env.pstr_functionName        = new string[st_env.totalNumFunctions];
@@ -368,10 +453,13 @@ s_env_nullify(
     st_env.b_mpmProgUse             = false;
     st_env.empmProg_current         = emp_NOP;
     st_env.vstr_mpmProgName.clear();
+    st_env.vstr_mpmProgName.push_back("NULL");
     st_env.vstr_mpmProgName.push_back("NOP");
     st_env.vstr_mpmProgName.push_back("pathFind");
     st_env.vstr_mpmProgName.push_back("autodijk");
     st_env.vstr_mpmProgName.push_back("autodijk_fast");
+    st_env.vstr_mpmProgName.push_back("ROI");
+    st_env.vstr_mpmProgName.push_back("externalMesh");
     st_env.totalmpmProgs	    = st_env.vstr_mpmProgName.size();
     st_env.pCmpmProg                = NULL; // Not yet created!
     // autodijk
@@ -381,11 +469,14 @@ s_env_nullify(
     st_env.totalmpmOverlays	    = (int) empmoverlay;
     st_env.empmOverlay_current	    = emo_NOP;
     st_env.vstr_mpmOverlayName.clear();
+    st_env.vstr_mpmOverlayName.push_back("LEGACY");
+    st_env.vstr_mpmOverlayName.push_back("NULL");
     st_env.vstr_mpmOverlayName.push_back("NOP");
     st_env.vstr_mpmOverlayName.push_back("unity");
-    st_env.vstr_mpmOverlayName.push_back("distance");
     st_env.vstr_mpmOverlayName.push_back("euclidean");
+    st_env.vstr_mpmOverlayName.push_back("distance");
     st_env.vstr_mpmOverlayName.push_back("fscurvs");
+    st_env.vstr_mpmOverlayName.push_back("curvature");
     st_env.totalmpmOverlays	    = st_env.vstr_mpmOverlayName.size();
     st_env.pCmpmOverlay		    = NULL; // Not yet created!
 
@@ -399,6 +490,7 @@ s_env_nullify(
 
 }
 
+#if 0
 void s_weights_copy(
     s_weights&		sw_target,
     s_weights&		sw_source
@@ -444,6 +536,7 @@ void s_Dweights_copy(
     sw_target.Dwdch	= sw_source.Dwdch;
     sw_target.Dwdir	= sw_source.Dwdir;
 }
+#endif
 
 string 
 s_env_HUP(
@@ -474,8 +567,10 @@ s_env_HUP(
     string		str_asynchComms         = "RUNPROG";
     string		str_optionsFQName;
     struct stat		st_fileInfo;
+#if 0
     s_weights           st_costWeight;
     s_Dweights		st_DcostWeight;
+#endif
     static int		oldport;
 
     str_optionsFQName = 	st_env.str_workingDir + 
@@ -496,6 +591,7 @@ s_env_HUP(
     // costs
     s_env_mpmProgSetIndex(&st_env, st_env.empmProg_current);
 
+#if 0
     // start legacy
     // WARNING!!
     s_env_costFctSetIndex (&st_env, st_env.empmOverlay_current);
@@ -506,8 +602,9 @@ s_env_HUP(
     s_weights_copy(*(st_env.pSTw), 	st_costWeight);
     s_Dweights_copy(*(st_env.pSTDw),	st_DcostWeight);
     // LEGACY DEBUGGING!!
-    st_env.b_mpmOverlayUse		= false;
+    // st_env.b_mpmOverlayUse		= false;
     // end legacy
+#endif
     
     if(st_env.port != oldport) {
 	if(*pCSSocketReceive) {
@@ -641,10 +738,10 @@ s_env_defaultsSet(
     st_env.startVertex                  = 0;
     st_env.endVertex                    = 0;
 
-    st_env.str_mainSurfaceFileName      = "";
-    st_env.str_auxSurfaceFileName       = "";
-    st_env.str_mainCurvatureFileName    = "";
-    st_env.str_auxCurvatureFileName     = "";
+    st_env.str_primarySurfaceFileName           = "";
+    st_env.str_secondarySurfaceFileName         = "";
+    st_env.str_primaryCurvatureFileName         = "";
+    st_env.str_secondaryCurvatureFileName       = "";
 
     st_env.b_patchFile_save             = false;
     st_env.b_labelFile_save             = true;
@@ -656,22 +753,28 @@ s_env_defaultsSet(
     st_env.str_labelFileNameOS          = "dijkAuxSurface";
 
     st_env.b_syslogPrepend              = true;
+    st_env.str_stdout                   = "./stdout.log";
     st_env.str_userMsgLog               = "./user_msg.log";
     st_env.str_sysMsgLog                = "localhost:1834";
     st_env.str_resultMsgLog             = "localhost:1835";
     st_env.serverControlPort            = 1701;
     st_env.timeoutSec                   = 60;
 
+    //
+    // LEGACY CODE
     st_env.pSTw                         = new s_weights;
     st_env.pSTDw                        = new s_Dweights;
 
     s_weights_setAll(*st_env.pSTw, 0.0);
-    st_env.pSTw->wd                    	= 1.0;
+    st_env.pSTw->wc                    	= 1.0;
 
     st_env.b_transitionPenalties        = false;
     s_Dweights_setAll(*st_env.pSTDw, 1.0);
+    // LEGACY CODE
+    //
 
-    st_env.str_costCurvFile             = st_env.str_hemi + ".autodijk.crv";
+    st_env.str_costCurvFile             = st_env.str_hemi+st_env.str_surface+\
+                                            ".autodijk.crv";
     st_env.b_exitOnDone                 = true;
     st_env.b_costPathSave               = false;
 
@@ -704,10 +807,17 @@ s_env_optionsFile_write(
     //
 
     C_SMessage*                 O;
+    char                        pch_commandLine[65536];
+    int                         i;
 
     if(ab_setToDefaults)        s_env_defaultsSet(st_env);
 
     O                           = st_env.pcsm_optionsFile;
+    strcpy(pch_commandLine, "");
+    for(i=0; i<st_env.argc; i++) {
+        strcat(pch_commandLine, st_env.ppch_argv[i]);
+        strcat(pch_commandLine, " ");
+    }
     if(O) {
 	delete O;
 	O             		= new C_SMessage( "",
@@ -718,20 +828,25 @@ s_env_optionsFile_write(
 
         O->pprintf("\n#\n# auto-generated optionsFile\n#\n\n");
 
-        O->pprintf("\n# Input surfaces and curvature functions\n");
+        O->pprintf("\n# Input surfaces and embedded curvature overlays\n");
         O->pcolprintf("surfaceFile",        " = %s\n",
-                        st_env.str_mainSurfaceFileName.c_str());
-        O->pcolprintf("auxSurfaceFile",     " = %s\n",
-                        st_env.str_auxSurfaceFileName.c_str());
-        O->pcolprintf("curvatureFile",      " = %s\n",
-                        st_env.str_mainCurvatureFileName.c_str());
-        O->pcolprintf("sulcalHeightFile",   " = %s\n",
-                        st_env.str_auxCurvatureFileName.c_str());
-        O->pprintf("\n# Start and End vertices\n\n");
+                        st_env.str_primarySurfaceFileName.c_str());
+        if(st_env.b_secondarySurface)
+            O->pcolprintf("secondarySurfaceFile",     " = %s\n",
+                        st_env.str_secondarySurfaceFileName.c_str());
+        if(st_env.b_primaryCurvature)
+            O->pcolprintf("primaryCurvature",      " = %s\n",
+                        st_env.str_primaryCurvatureFileName.c_str());
+        if(st_env.b_secondaryCurvature)
+            O->pcolprintf("secondaryCurvature",   " = %s\n",
+                        st_env.str_secondaryCurvatureFileName.c_str());
+#if 0
+        O->pprintf("\n# Start and End vertices\n");
         O->pcolprintf("startVertex",        " = %d\n",
                         st_env.startVertex);
         O->pcolprintf("endVertex",          " = %d\n",
                         st_env.endVertex);
+#endif
         O->pprintf("\n# Control flags and settings\n");
         O->pcolprintf("controlPort",         " = %d\n",
                         st_env.serverControlPort);
@@ -761,12 +876,15 @@ s_env_optionsFile_write(
         O->pcolprintf("labelFileAuxSurface"," = %s\n",
                         st_env.str_labelFileNameOS.c_str());
         O->pprintf("\n# Messaging channels\n");
+        O->pcolprintf("stdout",              " = %s\n",
+                        st_env.str_stdout.c_str());
         O->pcolprintf("userMessages",        " = %s\n",
                         st_env.str_userMsgLog.c_str());
         O->pcolprintf("sysMessages",         " = %s\n",
                         st_env.str_sysMsgLog.c_str());
         O->pcolprintf("resultMessages",      " = %s\n",
                         st_env.str_resultMsgLog.c_str());
+#if 0
         O->pprintf("\n# Weights\n");
         O->pcolprintf("wd",                 " = %f\n",
                         st_env.pSTw->wd);
@@ -801,6 +919,7 @@ s_env_optionsFile_write(
                         st_env.pSTDw->Dwdch);
         O->pcolprintf("Dwdir",              " = %f\n",
                         st_env.pSTDw->Dwdir);
+#endif
         O->pprintf("\n# mpmProg\n");
         O->pcolprintf("mpmProgID",          " = %d\n",
                         st_env.empmProg_current);
@@ -811,11 +930,15 @@ s_env_optionsFile_write(
         O->pprintf("\n# mpmOverlay\n");
         O->pcolprintf("mpmOverlayID",          " = %d\n",
                         st_env.empmOverlay_current);
+        O->pcolprintf("mpmOverlayArgs",        " = %s\n",
+                        st_env.str_mpmOverlayArgs.c_str());
         O->pprintf("\n# Debugging -- change at your own risk!\n");
         O->pcolprintf("b_mpmProgUse",		" = %d\n",
                         st_env.b_mpmProgUse);
         O->pcolprintf("b_mpmOverlayUse",	" = %d\n",
                         st_env.b_mpmOverlayUse);
+        O->pcolprintf("argc", " = %d\n", st_env.argc);
+        O->pcolprintf("argv", " = %s\n", pch_commandLine);
 
         O->dump();
     }
@@ -858,25 +981,29 @@ s_env_scan(
   // 29 October 2009
   // o Added 'b_useAbsCurvs'.
   // 
+  // 23 January 2012
+  // o Secondary surface and curvature reads filtered...
+  //
 
   static int    calls                   = 0;
 
-  static MRIS*  pMS_curvature           = NULL;
-  static MRIS*  pMS_auxSurface          = NULL;
-  static MRIS*  pMS_sulcal              = NULL;
+  static MRIS*  pMS_primary             = NULL;
+  static MRIS*  pMS_secondary           = NULL;
   string        str_value               = "";
   string        str_surfaceFileName     = "";
   string        str_auxSurfaceFileName  = "";
   string        str_curvatureFileName   = "";
-  string        str_sulcalFileName      = "";
+  string        str_secondaryCurvatureFile      = "";
   string        str_patchFileName       = "";
   string        str_labelFileName       = "";
   string        str_labelFileNameOS     = "";
   string        str_costFileName        = "";
+  string        str_stdout              = "";
   string        str_userMsgFileName     = "";
   string        str_sysMsgFileName      = "";
   string        str_resultMsgFileName   = "";
   string        str_mpmArgs             = "-x";
+  string        str_mpmOverlayArgs      = "-x";
 
   bool          b_useAbsCurvs           = true;
   bool          b_labelFile_save        = true;
@@ -897,18 +1024,20 @@ s_env_scan(
 
   // These are used to re-read possibly new files if a HUP
   // is sent to the process with changed options file.
-  static string str_surfaceFileNameOld      = "";
-  static string str_auxSurfaceFileNameOld   = "";
-  static string str_curvatureFileNameOld    = "";
-  static string str_sulcalFileNameOld       = "";
-  static string str_userMsgFileNameOld      = "";
-  static string str_sysMsgFileNameOld       = "";
-  static string str_resultMsgFileNameOld    = "";
+  static string str_surfaceFileNameOld          = "";
+  static string str_auxSurfaceFileNameOld       = "";
+  static string str_curvatureFileNameOld        = "";
+  static string str_secondaryCurvatureFileOld   = "";
+  static string str_stdoutOld                   = "";
+  static string str_userMsgFileNameOld          = "";
+  static string str_sysMsgFileNameOld           = "";
+  static string str_resultMsgFileNameOld        = "";
 
   // mpmProg options
   static string str_costCurvFile        = "autodijk.cost.crv";
   C_scanopt	cso_options		= *st_env.pcso_options;
-  
+
+#if 0
   if (cso_options.scanFor("startVertex", &str_value))
     startVertex  = atoi(str_value.c_str());
   else
@@ -921,6 +1050,7 @@ s_env_scan(
     error_exit("scanning user options",
                "I couldn't find a endVertex index.",
                11);
+#endif
 
   if (cso_options.scanFor("surfaceFile", &str_value))
     str_surfaceFileName =  str_value;
@@ -928,24 +1058,21 @@ s_env_scan(
     error_exit("scanning user options",
                "I couldn't find surfaceFile.",
                20);
-  if (cso_options.scanFor("auxSurfaceFile", &str_value))
-    str_auxSurfaceFileName =  str_value;
-  else
-    error_exit("scanning user options",
-               "I couldn't find auxSurfaceFile.",
-               21);
-  if (cso_options.scanFor("curvatureFile", &str_value))
-    str_curvatureFileName =  str_value;
-  else
-    error_exit("scanning user options",
-               "I couldn't find curvatureFile.",
-               22);
-  if (cso_options.scanFor("sulcalHeightFile", &str_value))
-    str_sulcalFileName =  str_value;
-  else
-    error_exit("scanning user options",
-               "I couldn't find sulcalHeightFile.",
-               23);
+  if (cso_options.scanFor("secondarySurfaceFile", &str_value)) {
+    str_auxSurfaceFileName      =  str_value;
+    st_env.b_secondarySurface   = true;
+  } else
+      st_env.b_secondarySurface = false;
+  if (cso_options.scanFor("curvatureFile", &str_value)) {
+      str_curvatureFileName     =  str_value;
+      st_env.b_primaryCurvature = true;
+  } else
+      st_env.b_primaryCurvature = false;
+  if (cso_options.scanFor("secondaryCurvature", &str_value)) {
+    str_secondaryCurvatureFile          =  str_value;
+    st_env.b_secondaryCurvature = true;
+  } else
+    st_env.b_secondaryCurvature = false;
   if (cso_options.scanFor("patchFile", &str_value))
     str_patchFileName =  str_value;
   else
@@ -1034,32 +1161,58 @@ s_env_scan(
     error_exit("scanning user options",
                "I couldn't find resultMessages.",
                53);
+  if (cso_options.scanFor("stdout", &str_value))
+    str_stdout =  str_value;
+  else
+    error_exit("scanning user options",
+               "I couldn't find stdout.",
+               54);
 
   if (cso_options.scanFor("costCurvFile",       &str_value))
       str_costCurvFile  =  str_value;
   if (cso_options.scanFor("b_mpmProgUse",       &str_value))
       b_mpmProgUse      = atoi(str_value.c_str());
   if (cso_options.scanFor("b_mpmOverlayUse",	&str_value))
-      b_mpmOverlayUse      = atoi(str_value.c_str());
+      b_mpmOverlayUse   = atoi(str_value.c_str());
   if (cso_options.scanFor("mpmProgID",          &str_value))
       mpmProgID         = atoi(str_value.c_str());
   if (cso_options.scanFor("mpmArgs",            &str_value))
       str_mpmArgs       = str_value;
+  if (cso_options.scanFor("mpmOverlayArgs",     &str_value))
+      str_mpmOverlayArgs= str_value;
   if (cso_options.scanFor("b_exitOnDone",       &str_value))
       b_exitOnDone      = atoi(str_value.c_str());
   if (cso_options.scanFor("b_costPathSave",     &str_value))
       b_costPathSave    = atoi(str_value.c_str());
 
-    if (cso_options.scanFor("mpmOverlayID",	&str_value))
-	mpmOverlayID	= atoi(str_value.c_str());
-    else
-	error_exit("scanning user options",
+  if (cso_options.scanFor("mpmOverlayID",	&str_value))
+      mpmOverlayID	= atoi(str_value.c_str());
+  else
+      error_exit("scanning user options",
 	    	   "I couldn't find mpmOverlayID",
 	    	   54);
     
   st_env.b_syslogPrepend = b_syslogPrepend;
   e_SMessageIO esm_io  = eSM_cpp;
   int pos   = 0;
+
+  if (str_stdout != str_stdoutOld) {
+    if (st_env.pcsm_stdout)
+      delete st_env.pcsm_stdout;
+    pos  = str_userMsgFileName.find_first_of(":");
+    // C-style IO for the internal "printf"ing...
+    esm_io = ((unsigned) pos != (unsigned) string::npos) ? eSS : eSM_c;
+    st_env.pcsm_stdout  = new C_SMessage( "",
+                                           eSM_raw,
+                                           str_stdout,
+                                           esm_io);
+    st_env.pcsm_stdout->str_syslogID_set(G_SELF);
+    st_env.pcsm_stdout->b_syslogPrepend_set(true);
+    st_env.pcsm_stdout->lw_set(st_env.lw);
+    st_env.pcsm_stdout->rw_set(st_env.rw);
+    st_env.pcsm_stdout->b_canPrint_set(true);
+  }
+
   if (str_userMsgFileName != str_userMsgFileNameOld) {
     if (st_env.pcsm_userlog)
       delete st_env.pcsm_userlog;
@@ -1102,46 +1255,41 @@ s_env_scan(
   string str_surfaceFileNameAbs;
   string str_auxSurfaceFileNameAbs;
   string str_curvatureFileNameAbs;
-  string str_sulcalFileNameAbs;
+  string str_secondaryCurvatureFileAbs;
 
   if (str_surfaceFileName  != str_surfaceFileNameOld) {
     str_rel2absDirSpec_change(str_surfaceFileName, str_surfaceFileNameAbs);
     str_rel2absDirSpec_change(str_auxSurfaceFileName, str_auxSurfaceFileNameAbs);
     //cout << "-->" << str_surfaceFileNameAbs << endl;
     //cout << "-->" << str_auxSurfaceFileNameAbs << endl;
-    ULOUT("Reading surface for primary curvature...");
-    pMS_curvature  = MRISread( (char*)str_surfaceFileNameAbs.c_str());
-    if(!pMS_curvature) {
+    ULOUT("Reading primary surface mesh...");
+    pMS_primary  = MRISread( (char*)str_surfaceFileNameAbs.c_str());
+    if(!pMS_primary) {
         nULOUT("\t\t\t[ failure ]\n");
         error_exit("reading the primary surface,",
                 "I couldn't access the file. Does it exist? Are permissions OK?",
                  30);
     }
     nULOUT("\t\t\t[ ok ]\n");
-    ULOUT("Reading surface for primary sulcal...");
-    pMS_sulcal   = MRISread( (char*)str_surfaceFileNameAbs.c_str());
-    if(!pMS_sulcal) {
-        nULOUT("\t\t\t[ failure ]\n");
-        error_exit("reading the secondary surface,",
-                "I couldn't access the file. Does it exist? Are permissions OK?",
-                 30);
+    if(st_env.b_secondarySurface) {
+        ULOUT("Reading secondary surface mesh...");
+        pMS_secondary   = MRISread( (char*)str_surfaceFileNameAbs.c_str());
+        if(!pMS_secondary) {
+            nULOUT("\t\t\t[ failure ]\n");
+            error_exit("reading the secondary surface,",
+                    "I couldn't access the file. Does it exist? Are permissions OK?",
+                     30);
+        }
+        nULOUT("\t\t\t\t[ ok ]\n");
     }
-    nULOUT("\t\t\t\t[ ok ]\n");
-    ULOUT("Reading surface for auxillary curvature...");
-    pMS_auxSurface  = MRISread( (char*)str_auxSurfaceFileNameAbs.c_str());
-    if(!pMS_auxSurface) {
-        nULOUT("\t\t\t[ failure ]\n");
-        error_exit("reading the auxillary surface,",
-                "I couldn't access the file. Does it exist? Are permissions OK?",
-                 30);
-    }
-    nULOUT("\t\t\t[ ok ]\n");
   }
-  if (str_curvatureFileName  != str_curvatureFileNameOld) {
-    str_rel2absDirSpec_change(str_curvatureFileName, str_curvatureFileNameAbs);
+  if (str_curvatureFileName  != str_curvatureFileNameOld &&
+          st_env.b_primaryCurvature) {
+    str_rel2absDirSpec_change(str_curvatureFileName,
+            str_curvatureFileNameAbs);
     //cout << "-->" << str_curvatureFileNameAbs << endl;
     ULOUT("Mapping curvature texture on primary surface...");
-    if(MRISreadCurvature(pMS_curvature,
+    if(MRISreadCurvature(pMS_primary,
         (char*)str_curvatureFileNameAbs.c_str()) != NO_ERROR) {
         nULOUT("\t\t\t[ failure ]\n");
         error_exit("reading the primary curvature file,",
@@ -1149,16 +1297,15 @@ s_env_scan(
                  30);
     }
     nULOUT("\t\t\t[ ok ]\n");
-    ULOUT("Mapping curvature texture on auxillary surface...");
-    MRISreadCurvature(pMS_auxSurface,  (char*)str_curvatureFileNameAbs.c_str());
-    nULOUT("\t\t[ ok ]\n");
   }
-  if (str_sulcalFileName  != str_sulcalFileNameOld) {
-    str_rel2absDirSpec_change(str_sulcalFileName, str_sulcalFileNameAbs);
-    //cout << "-->" << str_sulcalFileNameAbs << endl;
-    ULOUT("Mapping sulcal texture on primary surface...");
-    if(MRISreadCurvature(pMS_sulcal,
-        (char*)str_sulcalFileNameAbs.c_str()) != NO_ERROR) {
+  if (str_secondaryCurvatureFile  != str_secondaryCurvatureFileOld &&
+          st_env.b_secondaryCurvature) {
+    str_rel2absDirSpec_change(str_secondaryCurvatureFile,
+            str_secondaryCurvatureFileAbs);
+    //cout << "-->" << str_secondaryCurvatureFileAbs << endl;
+    ULOUT("Mapping secondary texture on secondary surface...");
+    if(MRISreadCurvature(pMS_secondary,
+        (char*)str_secondaryCurvatureFileAbs.c_str()) != NO_ERROR) {
         nULOUT("\t\t\t[ failure ]\n");
         error_exit("reading the secondary curvature file,",
                 "I couldn't access the file. Does it exist? Are permissions OK?",
@@ -1182,14 +1329,12 @@ s_env_scan(
     st_env.b_costPathSave               = b_costPathSave;
 
     //    if(!calls) {
-    st_env.pMS_active                   = pMS_curvature;
-    st_env.pMS_auxSurface               = pMS_auxSurface;
-    st_env.pMS_sulcal                   = pMS_sulcal;
-    st_env.pMS_curvature                = pMS_curvature;
+    st_env.pMS_primary                  = pMS_primary;
+    st_env.pMS_active                   = pMS_primary;
 
     str_surfaceFileNameOld              = str_surfaceFileName;
     str_curvatureFileNameOld            = str_curvatureFileName;
-    str_sulcalFileNameOld               = str_sulcalFileName;
+    str_secondaryCurvatureFileOld       = str_secondaryCurvatureFile;
     str_userMsgFileNameOld              = str_userMsgFileName;
     str_sysMsgFileNameOld               = str_sysMsgFileName;
     //    }
@@ -1203,10 +1348,12 @@ s_env_scan(
 
     // mpmOverlay
     st_env.empmOverlay_current		= (e_MPMOVERLAY) mpmOverlayID;
+    st_env.b_mpmOverlayUse              = b_mpmOverlayUse;
+    st_env.str_mpmOverlayArgs           = str_mpmOverlayArgs;
     
     if(    !st_env.str_hemi.length()
         || !st_env.str_subject.length()
-        || !st_env.str_mainSurfaceFileName.length()) {
+        || !st_env.str_primarySurfaceFileName.length()) {
         // Parse the surface text to extract the hemisphere 
         //+ and subject name
         vector<string>                  v_dir;
@@ -1222,6 +1369,7 @@ s_env_scan(
             str_surfaceFile = v_dir.at(tokens-1);
         str_tokenize(str_surfaceFile, v_surface, ".");
         st_env.str_hemi                 = v_surface.at(0);
+        st_env.str_surface              = v_surface.at(1);
         //st_env.str_mainSurfaceFileName  = v_surface.at(1);
         st_env.str_subject              = v_dir.at(tokens-3);
     }
@@ -1253,17 +1401,13 @@ s_env_surfaceFile_set(
   // o Initial design and coding.
   //
 
-  if (st_env.pMS_curvature) {
-    MRISfree(&st_env.pMS_curvature);
-    MRISfree(&st_env.pMS_sulcal);
+  if (st_env.pMS_primary) {
+    MRISfree(&st_env.pMS_primary);
   }
-  ULOUT("Reading surface for primary curvature...");
-  st_env.pMS_curvature  = MRISread( (char*)astr_fileName.c_str());
+  ULOUT("Reading primary surface...");
+  st_env.pMS_primary  = MRISread( (char*)astr_fileName.c_str());
   nULOUT("\t\t\t[ ok ]\n");
-  ULOUT("Reading surface for primary sulcal...");
-  st_env.pMS_sulcal  = MRISread( (char*)astr_fileName.c_str());
-  nULOUT("\t\t\t\t[ ok ]\n");
-  st_env.pMS_active   = st_env.pMS_curvature;
+  st_env.pMS_active   = st_env.pMS_primary;
 
   return true;
 }
@@ -1287,11 +1431,11 @@ s_env_surfaceCurvature_set(
   // o Initial design and coding.
   //
 
-  if (!st_env.pMS_curvature)
+  if (!st_env.pMS_primary)
     return false;
 
   ULOUT("Mapping curvature texture on primary surface...");
-  MRISreadCurvature(st_env.pMS_curvature,
+  MRISreadCurvature(st_env.pMS_primary,
                     (char*)astr_fileName.c_str());
   nULOUT("\t\t\t[ ok ]\n");
 
@@ -1299,7 +1443,7 @@ s_env_surfaceCurvature_set(
 }
 
 bool
-s_env_surfaceSulcal_set(
+s_env_secondarySurface_setCurvature(
   s_env&   st_env,
   string   astr_fileName
 ) {
@@ -1317,11 +1461,11 @@ s_env_surfaceSulcal_set(
   // o Initial design and coding.
   //
 
-  if (!st_env.pMS_sulcal)
+  if (!st_env.pMS_secondary)
     return false;
 
-  ULOUT("Mapping sulcal texture on primary surface...");
-  MRISreadCurvature(st_env.pMS_sulcal,
+  ULOUT("Mapping curvature texture on secondary surface...");
+  MRISreadCurvature(st_env.pMS_secondary,
                     (char*)astr_fileName.c_str());
   nULOUT("\t\t\t[ ok ]\n");
 
@@ -1347,11 +1491,11 @@ s_env_auxSurfaceCurvature_set(
   // o Initial design and coding.
   //
 
-  if (!st_env.pMS_auxSurface)
+  if (!st_env.pMS_secondary)
     return false;
 
   ULOUT("Mapping curvature texture on auxillary surface...");
-  MRISreadCurvature(st_env.pMS_auxSurface,
+  MRISreadCurvature(st_env.pMS_secondary,
                     (char*)astr_fileName.c_str());
   nULOUT("\t\t\t[ ok ]\n");
 
@@ -1379,10 +1523,10 @@ s_env_auxSurfaceFile_set(
   // o Initial design and coding.
   //
 
-  if (st_env.pMS_auxSurface)
-    MRISfree(&st_env.pMS_auxSurface);
+  if (st_env.pMS_secondary)
+    MRISfree(&st_env.pMS_secondary);
   ULOUT("Reading surface for auxillary curvature...");
-  st_env.pMS_auxSurface = MRISread( (char*)astr_fileName.c_str());
+  st_env.pMS_secondary = MRISread( (char*)astr_fileName.c_str());
   nULOUT("\t\t\t[ ok ]\n");
 
   return true;
@@ -1483,19 +1627,19 @@ s_env_activeSurfaceSetIndex(
 ) {
   switch (aindex) {
   case 0:
-    apst_env->pMS_active = apst_env->pMS_curvature;
+    apst_env->pMS_active = apst_env->pMS_primary;
     apst_env->esf_active = e_workingCurvature;
     break;
   case 1:
-    apst_env->pMS_active = apst_env->pMS_sulcal;
+    apst_env->pMS_active = apst_env->pMS_auxillary;
     apst_env->esf_active = e_workingSulcal;
     break;
   case 2:
-    apst_env->pMS_active = apst_env->pMS_auxSurface;
+    apst_env->pMS_active = apst_env->pMS_secondary;
     apst_env->esf_active = e_auxillary;
     break;
   default:
-    apst_env->pMS_active = apst_env->pMS_curvature;
+    apst_env->pMS_active = apst_env->pMS_primary;
     apst_env->esf_active = e_workingCurvature;
     break;
   }
@@ -1506,9 +1650,9 @@ s_env_mpmProgSetIndex(
     s_env*      apst_env,
     int         aindex
 ) {
-    int   ret     = -1;
-    int   lw      = apst_env->lw;
-    int   rw      = apst_env->rw;
+    int         ret             = -1;
+    int         lw              = apst_env->lw;
+    int         rw              = apst_env->rw;
 
     apst_env->b_mpmProgUse	= true;
     if(apst_env->pCmpmProg) {
@@ -1528,54 +1672,151 @@ s_env_mpmProgSetIndex(
 	apst_env->pCmpmProg		= new C_mpmProg_pathFind(apst_env,
 	    						apst_env->startVertex,
 	    						apst_env->endVertex);
-          // Check for any command-line spec'd args for the 'pathFind' mpmProg:
+          // Check for any command-line spec'd args for this mpmProg:
           if(apst_env->str_mpmArgs != "-x") {
             C_scanopt                   cso_mpm(apst_env->str_mpmArgs, ",",
                                                 e_EquLink, "", ":");
-            string      str_startVertex = "0";
-	    string	str_endVertex	= "0";
-            int         startVertex     = 0;
-	    int		endVertex	= apst_env->pMS_curvature->nvertices;
+            string      str_vertexStart = "0";
+	    string	str_vertexEnd	= "0";
+            int         vertexStart     = 0;
+	    int		vertexEnd	= apst_env->pMS_primary->nvertices;
             C_mpmProg_pathFind* pC_pathFind	= NULL;
             pC_pathFind_cast(apst_env->pCmpmProg, pC_pathFind);
-            if(cso_mpm.scanFor("startVertex", &str_startVertex)) {
-                startVertex     = atoi(str_startVertex.c_str());
-                pC_pathFind->vertexStart_set(startVertex);
+            if(cso_mpm.scanFor("vertexStart", &str_vertexStart)) {
+                vertexStart     = atoi(str_vertexStart.c_str());
+                pC_pathFind->vertexStart_set(vertexStart);
             }
-            if(cso_mpm.scanFor("endVertex", &str_endVertex)) {
-                endVertex     = atoi(str_endVertex.c_str());
-                pC_pathFind->vertexEnd_set(endVertex);
+            if(cso_mpm.scanFor("vertexEnd", &str_vertexEnd)) {
+                vertexEnd     = atoi(str_vertexEnd.c_str());
+                pC_pathFind->vertexEnd_set(vertexEnd);
             }
 	    s_env_optionsFile_write(*apst_env);
           }
 	break;
-      case emp_autodijk | emp_autodijk_fast:
+      case emp_autodijk: 
+      case emp_autodijk_fast:
 	if(aindex == emp_autodijk)
 	  apst_env->pCmpmProg	    	= new C_mpmProg_autodijk(apst_env);
 	if(aindex == emp_autodijk_fast)
           apst_env->pCmpmProg		= new C_mpmProg_autodijk_fast(apst_env);
-          // Check for any command-line spec'd args for the 'autodijk' mpmProg:
-          if(apst_env->str_mpmArgs != "-x") {
-            C_scanopt                   cso_mpm(apst_env->str_mpmArgs, ";",
-                                                e_EquLink, "--", ":");
-            string      str_polarVertex         = "0";
+        // Check for any command-line spec'd args for the 'autodijk' mpmProg:
+        if(apst_env->str_mpmArgs != "-x") {
+            C_scanopt                   cso_mpm(apst_env->str_mpmArgs, ",",
+                                                e_EquLink, "", ":");
+            string      str_vertexPolar         = "0";
+            string      str_vertexStart         = "0";
+            string      str_vertexStep          = "1";
+            string      str_vertexEnd           = "0";
             string      str_costCurvStem        = "";
-            int         polarVertex             = 0;
+            string      str_worldMapCreate      = "";
+            bool        b_worldMapCreate        = false;
+            int         vertexPolar             = 0;
+            int         vertexStart             = 0;
+            int         vertexEnd               = 0;
+            int         vertexStep              = 1;
             C_mpmProg_autodijk* pC_autodijk     = NULL;
             pC_autodijk_cast(apst_env->pCmpmProg, pC_autodijk);
-            if(cso_mpm.scanFor("vertexPolar", &str_polarVertex)) {
-                polarVertex     = atoi(str_polarVertex.c_str());
-                pC_autodijk->vertexPolar_set(polarVertex);
+            if(cso_mpm.scanFor("vertexPolar", &str_vertexPolar)) {
+                vertexPolar     = atoi(str_vertexPolar.c_str());
+                pC_autodijk->vertexPolar_set(vertexPolar);
+            }
+            if(cso_mpm.scanFor("vertexStart", &str_vertexStart)) {
+                vertexStart     = atoi(str_vertexStart.c_str());
+                pC_autodijk->vertexStart_set(vertexStart);
+            }
+            if(cso_mpm.scanFor("vertexStep", &str_vertexStep)) {
+                vertexStep      = atoi(str_vertexStep.c_str());
+                pC_autodijk->vertexStep_set(vertexStep);
+            }
+            if(cso_mpm.scanFor("vertexEnd", &str_vertexEnd)) {
+                vertexEnd       = atoi(str_vertexEnd.c_str());
+                pC_autodijk->vertexEnd_set(vertexEnd);
+            }
+            if(cso_mpm.scanFor("worldMapCreate", &str_worldMapCreate)) {
+                b_worldMapCreate = atoi(str_worldMapCreate.c_str());
+                pC_autodijk->worldMap_set(b_worldMapCreate);
             }
             if(cso_mpm.scanFor("costCurvStem", &str_costCurvStem)) {
-                apst_env->str_costCurvFile = apst_env->str_hemi + "." +
-                        apst_env->str_mainSurfaceFileName       + "." + 
-                        str_costCurvStem + ".crv";
+                apst_env->str_costCurvFile =
+                        apst_env->str_hemi + "."                +
+                        apst_env->str_surface + "."             +
+                        "autodijk-"                             +
+                        str_costCurvStem                        + 
+                        ".crv";
                 pC_autodijk->costFile_set(apst_env->str_costCurvFile);
                 s_env_optionsFile_write(*apst_env);
             }
           }
         break;
+      case emp_ROI:
+          apst_env->pCmpmProg             = new C_mpmProg_ROI(apst_env);
+            // Check for any command-line spec'd args for this mpmProg:
+            if(apst_env->str_mpmArgs != "-x") {
+              C_scanopt                   cso_mpm(apst_env->str_mpmArgs, ",",
+                                                  e_EquLink, "", ":");
+              float       f_radius              = 0.0;
+              bool        b_saveStaggered       = false;
+              bool	  b_borderRegion	= false;
+              string      str_option            = "";
+              C_mpmProg_ROI* pC_ROI             = NULL;
+              pC_ROI_cast(apst_env->pCmpmProg, pC_ROI);
+              if(cso_mpm.scanFor("radius", &str_option)) {
+                  f_radius              = atof(str_option.c_str());
+                  pC_ROI->radius_set(f_radius);
+              }
+              if(cso_mpm.scanFor("vertexFile", &str_option)) {
+                  if(!pC_ROI->vertexFile_load(str_option))
+                      error_exit("reading the vertexFile",
+                                  "a file access error occurred", 10);
+              }
+              if(cso_mpm.scanFor("labelFile", &str_option)) {
+                  if(!pC_ROI->labelFile_load(str_option))
+                      error_exit("reading the labelFile",
+                                  "a file access error occurred", 10);
+              }
+              if(cso_mpm.scanFor("borderOnly", &str_option)) {
+        	  b_borderRegion 	= atoi(str_option.c_str());
+        	  pC_ROI->boundaryOnly(b_borderRegion);
+              }
+              if(cso_mpm.scanFor("plySaveStaggered", &str_option)) {
+                  b_saveStaggered       = atoi(str_option.c_str());
+                  pC_ROI->plySaveStaggered_set(b_saveStaggered);
+              }
+              s_env_optionsFile_write(*apst_env);
+            }
+          break;
+      case emp_externalMesh:
+          apst_env->pCmpmProg             = new C_mpmProg_externalMesh(apst_env);
+            // Check for any command-line spec'd args for this mpmProg:
+            if(apst_env->str_mpmArgs != "-x") {
+              C_scanopt                   cso_mpm(apst_env->str_mpmArgs, ",",
+                                                  e_EquLink, "", ":");
+              float       f_radius              = 0.0;
+              bool        b_saveStaggered       = false;
+              string      str_option            = "";
+              C_mpmProg_ROI* pC_ROI             = NULL;
+              pC_ROI_cast(apst_env->pCmpmProg, pC_ROI);
+              if(cso_mpm.scanFor("radius", &str_option)) {
+                  f_radius              = atof(str_option.c_str());
+                  pC_ROI->radius_set(f_radius);
+              }
+              if(cso_mpm.scanFor("vertexFile", &str_option)) {
+                  if(!pC_ROI->vertexFile_load(str_option))
+                      error_exit("reading the vertexFile",
+                                  "a file access error occurred", 10);
+              }
+              if(cso_mpm.scanFor("labelFile", &str_option)) {
+                  if(!pC_ROI->labelFile_load(str_option))
+                      error_exit("reading the labelFile",
+                                  "a file access error occurred", 10);
+              }
+              if(cso_mpm.scanFor("plySaveStaggered", &str_option)) {
+                  b_saveStaggered       = atoi(str_option.c_str());
+                  pC_ROI->plySaveStaggered_set(b_saveStaggered);
+              }
+              s_env_optionsFile_write(*apst_env);
+            }
+          break;
     default:
         apst_env->empmProg_current      = (e_MPMPROG) 0;
 	apst_env->pCmpmProg		= new C_mpmProg_NOP(apst_env);
@@ -1595,9 +1836,10 @@ s_env_mpmOverlaySetIndex(
     s_env*      apst_env,
     int         aindex
 ) {
-    int   ret     = -1;
-    int   lw      = apst_env->lw;
-    int   rw      = apst_env->rw;
+    int         ret                     = -1;
+    int         lw                      = apst_env->lw;
+    int         rw                      = apst_env->rw;
+    string      str_curvatureFile       = "-x";
 
     if(apst_env->pCmpmOverlay) {
 	e_MPMOVERLAY e_overlay = apst_env->empmOverlay_current;
@@ -1609,6 +1851,10 @@ s_env_mpmOverlaySetIndex(
     }
     
     switch ((e_MPMOVERLAY) aindex) {
+      case emo_LEGACY:
+        lprintf(lw, "Forcing overlay engine to LEGACY mode.\n");
+        apst_env->b_mpmOverlayUse       = false;
+        break;
       case emo_NULL:
 	break;
       case emo_NOP:
@@ -1618,24 +1864,42 @@ s_env_mpmOverlaySetIndex(
 	apst_env->pCmpmOverlay	= new C_mpmOverlay_unity(apst_env);
 	break;
       case emo_distance:
+	apst_env->pCmpmOverlay	= new C_mpmOverlay_distance(apst_env);
 	break;
       case emo_euclidean:
+	apst_env->pCmpmOverlay	= new C_mpmOverlay_euclidean(apst_env);
         break;
       case emo_fscurvs:
+        break;
+      case emo_curvature:
+        // Check for any overlay args, specifically the name of the curv file
+        if(apst_env->str_mpmOverlayArgs != "-x") {
+            C_scanopt                   cso_mpm(apst_env->str_mpmOverlayArgs, 
+                                                ",",
+                                                e_EquLink, "", ":");
+            if(!cso_mpm.scanFor("primaryCurvature", &str_curvatureFile)) {
+                error_exit ("checking for curvature file to read",
+                            "it seems no file was specified",
+                            10);
+            }
+        }
+        apst_env->pCmpmOverlay  = new C_mpmOverlay_curvature(apst_env,
+                                                             str_curvatureFile);
         break;
       default:
         apst_env->empmOverlay_current   = (e_MPMOVERLAY) 0;
         apst_env->pCmpmOverlay		= new C_mpmOverlay_NOP(apst_env);
         break;
   }
-  if(aindex < 0 || aindex >= apst_env->totalmpmOverlays)
-      ret       = -1;
+  if(aindex < -2 || aindex >= apst_env->totalmpmOverlays)
+      ret       = -2;
   else
       ret       = aindex;
   apst_env->empmOverlay_current  = (e_MPMOVERLAY) ret;
   return ret;
 }
 
+#if 0
 void
 s_env_costFctList(
   s_env& ast_env
@@ -1692,6 +1956,7 @@ s_env_costFctSetIndex(
       ret       = aindex;
   return ret;
 }
+#endif
 
 float 
 s_env_edgeCostFind(
@@ -1727,7 +1992,7 @@ s_env_edgeCostFind(
     bool 	b_relNextReference	= false;
 
     if(!ast_env.b_mpmOverlayUse)
-    	f_cost = ast_env.costFunc_do(	ast_env, &(ast_env.st_iterInfo), 
+    	f_cost = ast_env.costFunc_do(	ast_env, &*(ast_env.pst_iterInfo),
         		    		avertexi, avertexj,
         		    		b_relNextReference);
     else
@@ -1736,7 +2001,7 @@ s_env_edgeCostFind(
     return f_cost;
 }
 
-
+#if 0
 void
 s_env_costFctSet(
     s_env*          pst_env,
@@ -1771,7 +2036,7 @@ costFunc_defaultDetermine(
     VERTEX*       v_n;
     float         dist, ave_curv, curv, max_height, max_curv, cost;
     s_weights*    pSTw = st_env.pSTw;
-    MRIS*         surf = st_env.pMS_curvature;
+    MRIS*         surf = st_env.pMS_primary;
 
     v_c = &surf->vertices[vno_c];
     if (b_relNextReference) {
@@ -1802,9 +2067,9 @@ costFunc_defaultDetermine(
     static int    calls = 0;
 
     if (!calls) {
-        V3_e.f_x = st_env.pMS_curvature->vertices[st_env.endVertex].x;
-        V3_e.f_y = st_env.pMS_curvature->vertices[st_env.endVertex].y;
-        V3_e.f_z = st_env.pMS_curvature->vertices[st_env.endVertex].z;
+        V3_e.f_x = st_env.pMS_primary->vertices[st_env.endVertex].x;
+        V3_e.f_y = st_env.pMS_primary->vertices[st_env.endVertex].y;
+        V3_e.f_z = st_env.pMS_primary->vertices[st_env.endVertex].z;
     }
     calls++;
 
@@ -1846,7 +2111,7 @@ costFunc_defaultDetermine(
     pst_iterInfo->iter           = calls;
     pst_iterInfo->f_distance     = dist;
     pst_iterInfo->f_curvature    = ave_curv;
-    pst_iterInfo->f_sulcalHeight = st_env.pMS_sulcal->vertices[vno_c].curv;
+    pst_iterInfo->f_sulcalHeight = st_env.pMS_secondary->vertices[vno_c].curv;
     pst_iterInfo->f_dir          = f_dir;
 
     // Initial testing revealed that 'wdch' was particularly sensitive to *=10,
@@ -1866,13 +2131,13 @@ costFunc_defaultDetermine(
         wdch    *= st_env.pSTDw->Dwdch;
     }
 
-    max_height  = (st_env.pMS_sulcal->max_curv);
-    max_curv    = (st_env.pMS_curvature->max_curv);
+    max_height  = (st_env.pMS_secondary->max_curv);
+    max_curv    = (st_env.pMS_primary->max_curv);
     if(st_env.b_useAbsCurvs) {
         f_height        = fabs(f_height);
         curv            = fabs(ave_curv);
     } else {
-        f_height        = max_height - st_env.pMS_sulcal->vertices[vno_c].curv;
+        f_height        = max_height - st_env.pMS_secondary->vertices[vno_c].curv;
         curv            = max_curv   - ave_curv;
     }
     // cost   = dist + 20.0 * dist * curv;
@@ -1938,7 +2203,7 @@ costFunc_distanceReturn(
     s_weights*  	pSTw        = st_env.pSTw;
     float       	wd          = pSTw->wd;
     VERTEX*     	v_c         = NULL;
-    MRIS*    		surf        = st_env.pMS_curvature;
+    MRIS*    		surf        = st_env.pMS_primary;
     const char*       	pch_proc    = "costFunc_distanceReturn(...)";
     char        	pch_txt[65536];
     static bool 	b_warned    = false;
@@ -1997,7 +2262,7 @@ costFunc_EuclideanReturn(
 
     VERTEX*     v_c         = NULL;
     VERTEX*     v_n         = NULL;
-    MRIS*       surf        = st_env.pMS_curvature;
+    MRIS*       surf        = st_env.pMS_primary;
     static int  calls       = 0;
     const char*       pch_proc    = "costFunc_EuclideanReturn(...)";
     char        pch_txt[65536];
@@ -2043,6 +2308,6 @@ costFunc_EuclideanReturn(
 
     return(f_cost);
 }
-
+#endif
 
 /* eof */

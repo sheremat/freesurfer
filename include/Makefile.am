@@ -54,6 +54,7 @@ EXTRA_DIST=\
 	fmriutils.h \
 	fsenv.h \
 	fsgdf.h \
+	fsinit.h \
 	FsgdfPlot.h \
 	fsgdf_wrap.h \
 	fsglm.h \
@@ -137,6 +138,7 @@ EXTRA_DIST=\
 	minmax.hpp \
 	mosaic.h \
 	mri2.h \
+	mriBSpline.h \
 	mri_ca_configFile.h \
 	mri_ca_gausDist.h \
 	mri_ca_labelingParameters.h \
@@ -216,6 +218,9 @@ EXTRA_DIST=\
 	resample.h \
 	rescale.h \
 	retinotopy.h \
+	rfa.h \
+	rforest.h \
+	rfutils.h \
 	rgb_image.h \
 	rgb_utils.h \
 	runfuncs.h \
@@ -226,6 +231,7 @@ EXTRA_DIST=\
 	stats.h \
 	stc.h \
 	struct.h \
+	connectcomp.h \
 	surfcluster.h \
 	svm.h \
 	tags.h \
@@ -239,7 +245,6 @@ EXTRA_DIST=\
 	tritri.h \
 	tukey.h \
 	typedefs.h \
-	unwarpGradientNonlinearity.h \
 	utils.h \
 	utilsmath.h \
 	version.h \
@@ -728,6 +733,10 @@ nvcc_version.h:
 	echo "bcopy(nvcc_version,buf,nvcc_version_len);" >> nvcc_version.h
 	echo "buf[nvcc_version_len]=0;" >> nvcc_version.h
 	echo "printf(buf);" >> nvcc_version.h
+	echo "" >> nvcc_version.h
+	echo "nvcc_version.h was created by running:" >> nvcc_version.h
+	echo "nvcc --version > nvcc_version" >> nvcc_version.h
+	echo "xxd -i nvcc_version >> nvcc_version.h" >> nvcc_version.h
 	echo "*/" >> nvcc_version.h
 	xxd -i nvcc_version >> nvcc_version.h
 

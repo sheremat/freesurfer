@@ -7,9 +7,9 @@
 /*
  * Original Author: REPLACE_WITH_FULL_NAME_OF_CREATING_AUTHOR 
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/03/02 00:04:09 $
- *    $Revision: 1.42 $
+ *    $Author: greve $
+ *    $Date: 2012/10/23 19:36:27 $
+ *    $Revision: 1.47 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -50,6 +50,7 @@ typedef struct
   int XgLoaded;      // 1 if Xg has been loaded into glm->X
 
   MRI *w;            // Per-voxel, per-input weight
+  MATRIX *wg;        // Global weight vector
   int skipweight;    // Don't use weight even if w != NULL
   MRI *mask;         // Only proc within mask
   int n_ill_cond;    // Number of ill-conditioned voxels
@@ -70,6 +71,7 @@ typedef struct
   MRI *F[100];       // F = gamma'*inv(C*inv(XtX)C')*gamma/(rvar*J)
   MRI *p[100];       // p = significance of the F
   MRI *ypmf[100];    // partial model fit for each contrast
+  MRI *FrameMask;    // Exclude a frame at a voxel if 0
 }
 MRIGLM;
 /*---------------------------------------------------------*/
@@ -90,7 +92,7 @@ MRI *fMRIframe(MRI *inmri, int frame, MRI *outmri);
 MATRIX *MRItoMatrix(MRI *mri, int c, int r, int s,
                     int Mrows, int Mcols, MATRIX *M);
 MATRIX *MRItoSymMatrix(MRI *mri, int c, int r, int s, MATRIX *M);
-int MRIfromMatrix(MRI *mri, int c, int r, int s, MATRIX *M);
+int MRIfromMatrix(MRI *mri, int c, int r, int s, MATRIX *M, MRI *FrameMask);
 int MRIfromSymMatrix(MRI *mri, int c, int r, int s, MATRIX *M);
 MRI *MRInormWeights(MRI *w, int sqrtFlag, int invFlag, MRI *mask, MRI *wn);
 
@@ -130,5 +132,8 @@ MATRIX *fMRItoMatrix(MRI *fmri, MATRIX *M);
 int fMRIfromMatrix(MATRIX *M, MRI *fmri);
 MRI *fMRIspatialCorMatrix(MRI *fmri);
 MRI *fMRIdistance(MRI *mri, MRI *mask);
+MRI *fMRIcumSum(MRI *inmri, MRI *mask, MRI *outmri);
+MRI *fMRIcumTrapZ(MRI *y, MATRIX *t, MRI *mask, MRI *yz);
+MATRIX *HalfLife2Weight(double HalfLifeMin, MATRIX *tSec);
 
 #endif

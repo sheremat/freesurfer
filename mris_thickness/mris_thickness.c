@@ -8,9 +8,9 @@
 /*
  * Original Author: Bruce Fischl
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/03/02 00:04:34 $
- *    $Revision: 1.23 $
+ *    $Author: fischl $
+ *    $Date: 2012/11/27 17:41:26 $
+ *    $Revision: 1.28 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -42,11 +42,13 @@
 #include "macros.h"
 #include "version.h"
 #include "icosahedron.h"
+#include "label.h"
 
-static char vcid[] = "$Id: mris_thickness.c,v 1.23 2011/03/02 00:04:34 nicks Exp $";
+static char vcid[] = "$Id: mris_thickness.c,v 1.28 2012/11/27 17:41:26 fischl Exp $";
 
 int main(int argc, char *argv[]) ;
 
+static int fill_thickness_holes(MRI_SURFACE *mris, LABEL *cortex_label, LABEL *fsaverage_label) ;
 int  MRISmeasureDistanceBetweenSurfaces(MRI_SURFACE *mris, MRI_SURFACE *mris2, int signed_dist) ;
 static int  get_option(int argc, char *argv[]) ;
 static void usage_exit(void) ;
@@ -71,6 +73,9 @@ static int laplace_thick = 0 ;
 static INTEGRATION_PARMS parms ;
 
 static char *long_fname = NULL ;
+
+static LABEL *cortex_label = NULL ;
+static LABEL *fsaverage_label = NULL ;
 
 #include "voxlist.h"
 #include "mrinorm.h"
@@ -134,7 +139,6 @@ MRISsolveLaplaceEquation(MRI_SURFACE *mris, MRI *mri, double res)
           vl->xi[nribbon] = x ;
           vl->yi[nribbon] = y ;
           vl->zi[nribbon] = z ;
-
           nribbon++ ;
         }
       }
@@ -310,7 +314,7 @@ main(int argc, char *argv[]) {
   struct timeb  then ;
 
   /* rkt: check for and handle version tag */
-  nargs = handle_version_option (argc, argv, "$Id: mris_thickness.c,v 1.23 2011/03/02 00:04:34 nicks Exp $", "$Name: stable5 $");
+  nargs = handle_version_option (argc, argv, "$Id: mris_thickness.c,v 1.28 2012/11/27 17:41:26 fischl Exp $", "$Name:  $");
   if (nargs && argc - nargs == 1)
     exit (0);
   argc -= nargs;
@@ -322,8 +326,9 @@ main(int argc, char *argv[]) {
 
   // for variational thickness estimation
   parms.dt = 0.1 ;
-  parms.remove_neg = 0 ;
-  parms.momentum = .5; parms.niterations = 1000 ;
+  parms.remove_neg = 1 ;
+  parms.momentum = .1; 
+  parms.niterations = 1000 ;
   parms.l_nlarea = 0 ;
   parms.l_thick_min = 1 ;
   parms.l_thick_spring = 0 ;
@@ -331,8 +336,8 @@ main(int argc, char *argv[]) {
   parms.l_ashburner_lambda = .1 ;
   parms.l_tspring = .25;
   parms.l_thick_normal = 1;
-  parms.integration_type = INTEGRATE_LM_SEARCH ;
-  parms.tol = 1e-2 ;
+  parms.integration_type = INTEGRATE_MOMENTUM ;
+  parms.tol = 1e-3 ;
 
   ac = argc ;
   av = argv ;
@@ -356,16 +361,8 @@ main(int argc, char *argv[]) {
     strcpy(sdir, cp) ;
   }
 
-
-#if 0
-  sprintf(fname, "%s/%s/surf/%s.%s", sdir, sname, hemi, GRAY_MATTER_NAME) ;
-#else
   sprintf(fname, "%s/%s/surf/%s.%s", sdir, sname, hemi, pial_name) ;
-#endif
-  if (!FileExists(fname))
-    sprintf(fname, "%s/%s/surf/%s.gray", sdir, sname, hemi) ;
-
-  fprintf(stderr, "reading gray matter surface %s...\n", fname) ;
+  fprintf(stderr, "reading pial surface %s...\n", fname) ;
   mris = MRISread(fname) ;
   if (!mris)
     ErrorExit(ERROR_NOFILE, "%s: could not read surface file %s",
@@ -636,6 +633,12 @@ main(int argc, char *argv[]) {
   } else {
     MRISmeasureCorticalThickness(mris, nbhd_size, max_thick) ;
   }
+ 
+  if (cortex_label)  // fill in thickness in holes in the cortex label where it isn't to be trusted
+  {
+    fill_thickness_holes(mris, cortex_label, fsaverage_label) ;
+  }
+
 
 #if 0
   sprintf(fname, "%s/%s/surf/%s", sdir, sname, out_fname) ;
@@ -666,6 +669,18 @@ get_option(int argc, char *argv[]) {
     print_usage() ;
   else if (!stricmp(option, "-version"))
     print_version() ;
+  else if (!stricmp(option, "fill_holes"))
+  {
+    cortex_label = LabelRead(NULL, argv[2]) ;
+    if (cortex_label == NULL)
+      ErrorExit(ERROR_NOFILE, "%s: could not read label from %s", argv[2]) ;
+    fsaverage_label = LabelRead(NULL, argv[3]) ;
+    if (fsaverage_label == NULL)
+      ErrorExit(ERROR_NOFILE, "%s: could not read label from %s", argv[3]) ;
+    nargs = 2 ;
+    printf("filling holes in label %s that are not present in %s\n", argv[2], argv[3]) ;
+
+  }
   else if (!stricmp(option, "long"))
   {
     long_fname = argv[2] ;
@@ -706,6 +721,9 @@ get_option(int argc, char *argv[]) {
   } else if (!stricmp(option, "neg")) {
     parms.remove_neg = 0 ;
     printf("allowing negative  vertices to occur during integration\n") ;
+  } else if (!stricmp(option, "noneg")) {
+    parms.remove_neg = 1 ;
+    printf("not allowing negative  vertices to occur during integration\n") ;
   } else if (!stricmp(option, "nlarea")) {
     parms.l_nlarea = atof(argv[2]) ;
     printf("using nonlinear area coefficient %2.3f\n", parms.l_nlarea);
@@ -817,6 +835,7 @@ print_help(void) {
           "<thickness file>.\n") ;
   fprintf(stderr, "\nvalid options are:\n\n") ;
   fprintf(stderr, "-max <max>\t use <max> to threshold thickness (default=5mm)\n") ;
+  fprintf(stderr, "-fill_holes <cortex label> <fsaverage cortex label> fill in thickness in holes in the cortex label\n");
   exit(1) ;
 }
 
@@ -824,5 +843,43 @@ static void
 print_version(void) {
   fprintf(stderr, "%s\n", vcid) ;
   exit(1) ;
+}
+
+static int
+fill_thickness_holes(MRI_SURFACE *mris, LABEL *cortex_label, LABEL *fsaverage_label)
+{
+  int    vno ;
+  VERTEX *v ;
+
+  LabelMarkSurface(cortex_label, mris) ;
+  LabelAddToMark(fsaverage_label, mris, 2) ;
+  for (vno = 0 ; vno < mris->nvertices ; vno++)
+  {
+    v = &mris->vertices[vno] ;
+    if (v->marked <= 1)  // not in fsaverage surface
+    {
+      v->marked = 0 ;   // not marked in either
+      continue ;
+    }
+
+    v->val = v->curv ;  // put thickness into val field for soap bubble below
+    if (v->marked == 2)  // marked only in fsaverage surface, don't make it a fixed point
+      v->marked = 0 ;
+    else
+      v->marked = 1 ;
+  }
+
+  MRISsoapBubbleVals(mris, 500); 
+  MRISclearMarks(mris) ;
+  LabelMarkSurface(cortex_label, mris) ;
+  LabelAddToMark(fsaverage_label, mris, 2) ;
+  for (vno = 0 ; vno < mris->nvertices ; vno++)
+  {
+    v = &mris->vertices[vno] ;
+    if (v->marked < 2)
+      v->val = 0 ;   // fix everything not in the fsaverage label to have 0 thickness
+  }
+  MRIScopyValuesToCurvature(mris) ;
+  return(NO_ERROR) ;
 }
 

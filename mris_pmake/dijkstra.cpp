@@ -7,9 +7,9 @@
 /*
  * Original Author: Rudolph Pienaar / Christian Haselgrove
  * CVS Revision Info:
- *    $Author: nicks $
- *    $Date: 2011/02/27 21:18:07 $
- *    $Revision: 1.8 $
+ *    $Author: rudolph $
+ *    $Date: 2012/04/13 21:20:38 $
+ *    $Revision: 1.10 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -189,7 +189,7 @@ int dijkstra(
   // condition, otherwise the while() will terminate after one loop.
   while ( vno_c!=vno_f || !totalLoops) {
     totalLoops++;
-    if(totalLoops >= st_env.pMS_curvature->nvertices-1) {
+    if(totalLoops >= st_env.pMS_primary->nvertices-1) {
       // If this condition is true, we have processed all available vertices
       // in the mesh -- typically only occurs if the startVertex == endVertex
       // and is used for 'autodijk' type calculations.
@@ -199,10 +199,10 @@ int dijkstra(
     
     /* set vno_c (find min) */
     if (d_list == NULL) {
-      ErrorPrintf(ERROR_BADPARM, "dijkstra(): out of vertices");
-      colprintf(st_env.lw, st_env.rw, "start:stop", "[ %d:%d ]\n",
-                st_env.startVertex,
-                st_env.endVertex);
+//      ErrorPrintf(ERROR_BADPARM, "dijkstra(): out of vertices");
+//      colprintf(st_env.lw, st_env.rw, "start:stop", "[ %d:%d ]\n",
+//                st_env.startVertex,
+//                st_env.endVertex);
       goto error;
     }
 

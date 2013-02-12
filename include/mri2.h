@@ -8,8 +8,8 @@
  * Original Author: REPLACE_WITH_FULL_NAME_OF_CREATING_AUTHOR 
  * CVS Revision Info:
  *    $Author: greve $
- *    $Date: 2011/04/19 21:33:41 $
- *    $Revision: 1.35.2.1 $
+ *    $Date: 2012/06/11 17:42:47 $
+ *    $Revision: 1.40 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -34,6 +34,7 @@ extern "C" {
 #include "mri.h"
 #include "mriTransform.h"
 #include "mrisurf.h"
+#include "connectcomp.h"
 
 MRI *mri_load_bvolume(char *bfstem);
 int  mri_save_as_bvolume(MRI *vol, char *stem, int svendian, int svtype);
@@ -50,7 +51,7 @@ size_t mri_sizeof(MRI *vol);
 MRI *mri_reshape(MRI *vol, int ncols, int nrows, int nslices, int nframes);
 int MRIfdr2vwth(MRI *vol, int frame, double fdr, int signid,
                 int log10flag, MRI *mask, double *vwth, MRI *ovol);
-int MRIdimMismatch(MRI *v1, MRI *v2, int frameflag);
+int MRIdimMismatch( const MRI *v1, const MRI *v2, int frameflag);
 MATRIX *MRIcovarianceMatrix(MRI *mri, MRI *mask);
 int MRIpca(MRI *D, MATRIX **pU, VECTOR **pS, MRI **pV, MRI *mask);
 int WritePCAStats(char *fname, MATRIX *Spca);
@@ -92,9 +93,10 @@ int MRIvol2VolVSM(MRI *src, MRI *targ, MATRIX *Vt2s,
 		  int InterpCode, float param, MRI *vsm);
 int MRIvol2VolTkRegVSM(MRI *mov, MRI *targ, MATRIX *Rtkreg,
 		       int InterpCode, float param, MRI *vsm);
-MRI *MRIvol2surfVSM(MRI *SrcVol, MATRIX *Rtk, MRI_SURFACE *TrgSurf,
-                    MRI *vsm, int InterpMethod, MRI *SrcHitVol,
-                    float ProjFrac, int ProjType, int nskip, 
+MRI *MRIvol2surfVSM( const MRI *SrcVol,
+                     const MATRIX *Rtk, const MRI_SURFACE *TrgSurf,
+                     const MRI *vsm, int InterpMethod, MRI *SrcHitVol,
+                     float ProjFrac, int ProjType, int nskip, 
 		    MRI *TrgVol);
 MRI *MRIsegBoundary(MRI *seg);
 MRI *MRIsliceNo(MRI *in, MRI *out);
@@ -104,6 +106,12 @@ int MRIsegFrameAvg(MRI *seg, int segid, MRI *mri, double *favg);
 int MRIsegStats(MRI *seg, int segid, MRI *mri,int frame,
                 float *min, float *max, float *range,
                 float *mean, float *std);
+int MRIsegStatsRobust(MRI *seg, int segid, MRI *mri,int frame,
+		      float *min, float *max, float *range,
+		      float *mean, float *std, float Pct);
+
+MRI *MRImask_with_T2_and_aparc_aseg(MRI *mri_src, MRI *mri_dst, MRI *mri_T2, MRI *mri_aparc_aseg, float T2_thresh, int mm_from_exterior) ;
+int *MRIsegmentationList(MRI *seg, int *pListLength);
 
 
 #if defined(__cplusplus)

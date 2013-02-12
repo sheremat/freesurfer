@@ -8,9 +8,9 @@
 /*
  * Original Author: Bruce Fischl
  * CVS Revision Info:
- *    $Author: greve $
- *    $Date: 2011/05/05 19:04:12 $
- *    $Revision: 1.387.2.5 $
+ *    $Author: fischl $
+ *    $Date: 2012/11/15 21:06:44 $
+ *    $Revision: 1.405 $
  *
  * Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
  *
@@ -80,6 +80,7 @@
 #include "mri_circulars.h"
 #include "dti.h"
 #include "gifti_local.h"
+#include "gcamorph.h"
 
 static int niiPrintHdr(FILE *fp, struct nifti_1_header *hdr);
 
@@ -282,7 +283,14 @@ int getSliceDirection(MRI *mri)
 {
   int direction = MRI_UNDEFINED;
 
-  if (isCloseToOne(mri->x_r) && 
+  if (!strcmp(MRIsliceDirectionName(mri),"coronal"))
+    direction = MRI_CORONAL;
+  else if (!strcmp(MRIsliceDirectionName(mri),"sagittal"))
+    direction = MRI_SAGITTAL;
+  else if (!strcmp(MRIsliceDirectionName(mri),"axial"))
+    direction = MRI_AXIAL;
+
+  /*  if (isCloseToOne(mri->x_r) && 
       isCloseToOne(mri->y_s) && 
       isCloseToOne(mri->z_a))
     direction = MRI_CORONAL;
@@ -293,7 +301,7 @@ int getSliceDirection(MRI *mri)
   else if (isCloseToOne(mri->x_r) && 
            isCloseToOne(mri->y_a) && 
            isCloseToOne( mri->z_s))
-    direction = MRI_HORIZONTAL;
+	   direction = MRI_HORIZONTAL;*/
   return direction;
 }
 
@@ -329,6 +337,119 @@ int mriConformed(MRI *mri)
   else
     return 1;
 }
+
+float MRIfindMinSize(MRI *mri, int *conform_width)
+{
+  double xsize, ysize, zsize, minsize;
+  double fwidth, fheight, fdepth, fmax;
+  xsize = mri->xsize;
+  ysize = mri->ysize;
+  zsize = mri->zsize;
+  // there are 3! = 6 ways of ordering
+  //             xy  yz  zx
+  // x > y > z    z min
+  // x > z > y    y min
+  // z > x > y    y min
+  //////////////////////////
+  // y > x > z    z min
+  // y > z > x    x min
+  // z > y > x    x min
+  if (xsize > ysize)
+  {
+    minsize = (ysize > zsize) ? zsize : ysize;
+  }
+  else
+  {
+    minsize = (zsize > xsize) ? xsize : zsize;
+  }
+
+  // now decide the conformed_width
+  // algorighm ----------------------------------------------
+  // calculate the size in mm for all three directions
+  fwidth = mri->xsize*mri->width;
+  fheight = mri->ysize*mri->height;
+  fdepth = mri->zsize*mri->depth;
+  // pick the largest
+  if (fwidth> fheight)
+  {
+    fmax = (fwidth > fdepth) ? fwidth : fdepth;
+  }
+  else
+  {
+    fmax = (fdepth > fheight) ? fdepth : fheight;
+  }
+
+  *conform_width = (int) ceil(fmax/minsize);
+  // just to make sure that if smaller than 256, use 256 anyway
+  if (*conform_width < 256)
+  {
+    *conform_width = 256;
+  }
+
+  return (float) minsize;
+}
+
+// this function is called when conform is done
+int MRIfindRightSize(MRI *mri, float conform_size)
+{
+  // user gave the conform_size
+  double xsize, ysize, zsize;
+  double fwidth, fheight, fdepth, fmax;
+  int conform_width;
+
+  xsize = mri->xsize;
+  ysize = mri->ysize;
+  zsize = mri->zsize;
+
+  // now decide the conformed_width
+  // calculate the size in mm for all three directions
+  fwidth = mri->xsize*mri->width;
+  fheight = mri->ysize*mri->height;
+  fdepth = mri->zsize*mri->depth;
+  // pick the largest
+  if (fwidth> fheight)
+  {
+    fmax = (fwidth > fdepth) ? fwidth : fdepth;
+  }
+  else
+  {
+    fmax = (fdepth > fheight) ? fdepth : fheight;
+  }
+  // get the width with conform_size
+  conform_width = (int) ceil(fmax/conform_size);
+
+  // just to make sure that if smaller than 256, use 256 anyway
+  if (conform_width < 256)
+  {
+    conform_width = 256;
+  }
+  // conform_width >= 256.   allow 10% leeway
+  else if ((conform_width -256.)/256. < 0.1)
+  {
+    conform_width = 256;
+  }
+
+  // if more than 256, warn users
+  if (conform_width > 256)
+  {
+    fprintf(stderr, "WARNING =================="
+            "++++++++++++++++++++++++"
+            "=======================================\n");
+    fprintf(stderr, "The physical sizes are "
+            "(%.2f mm, %.2f mm, %.2f mm), "
+            "which cannot fit in 256^3 mm^3 volume.\n",
+            fwidth, fheight, fdepth);
+    fprintf(stderr, "The resulting volume will have %d slices.\n",
+            conform_width);
+    fprintf(stderr, "If you find problems, please let us know "
+            "(freesurfer@nmr.mgh.harvard.edu).\n");
+    fprintf(stderr, "=================================================="
+            "++++++++++++++++++++++++"
+            "===============\n\n");
+  }
+  return conform_width;
+}
+
 
 void setMRIforSurface(MRI *mri)
 {
@@ -659,6 +780,25 @@ MRI *mri_read( const char *fname,
   {
     mri = mghRead(fname_copy, volume_flag, -1);
   }
+  else if (type == MGH_MORPH)
+  {
+    GCA_MORPH *gcam ;
+    gcam = GCAMread(fname_copy) ;
+    if (gcam == NULL)
+      ErrorReturn(NULL, (ERROR_BADPARM, "MRIread(%s): could not read .m3z\n", fname_copy)) ;
+    if (gcam->type == GCAM_RAS)
+      GCAMrasToVox(gcam, NULL) ;
+    if (start_frame < 0)
+      mri = GCAMwriteWarpToMRI(gcam, NULL) ;
+    else
+    {
+      printf("reading 'frame' # %d from gcam (see gcamorph.h for definitions)\n", start_frame) ;
+      mri = GCAMwriteMRI(gcam, NULL, start_frame) ;
+      start_frame = end_frame = 0 ;
+    }
+
+    GCAMfree(&gcam) ;
+  }
   else if (type == GDF_FILE)
   {
     mri = gdfRead(fname_copy, volume_flag);
@@ -932,6 +1072,9 @@ MRI *MRIread(const char *fname)
 
   FileNameFromWildcard(fname, buf) ;
   fname = buf ;
+  int nstart = global_progress_range[0];
+  int nend = global_progress_range[1];
+  global_progress_range[1] = nstart + (nend-nstart)*2/3;
   mri = mri_read(fname, MRI_VOLUME_TYPE_UNKNOWN, TRUE, -1, -1);
 
   /* some volume format needs to read many
@@ -940,6 +1083,10 @@ MRI *MRIread(const char *fname)
   if (mri==NULL)
     return NULL;
 
+  /* MRIremoveNaNs also takes long time so we split existing progress range
+     between it and mri_read */
+  global_progress_range[0] = global_progress_range[1];
+  global_progress_range[1] = nend;
   MRIremoveNaNs(mri, mri) ;
   return(mri);
 
@@ -1263,6 +1410,8 @@ MRIwriteFrame(MRI *mri, const char *fname, int frame)
 {
   MRI *mri_tmp ;
 
+  if (frame >= mri->nframes)
+    ErrorExit(ERROR_BADPARM, "MRIwriteFrame(%d) - frame out of bounds (%d)",frame,mri->nframes) ;
   mri_tmp =  MRIcopyFrame(mri, NULL, frame, 0) ;
   MRIwrite(mri_tmp, fname) ;
   MRIfree(&mri_tmp) ;
@@ -1754,6 +1903,7 @@ static MRI *corRead(const char *fname, int read_volume)
       }
     }
     fclose(fp);
+    exec_progress_callback(i-mri->imnr0, imnr1-imnr0+1, 0, 1);
   }
 
   return(mri);
@@ -1929,6 +2079,7 @@ static int corWrite(MRI *mri, const char *fname)
       }
     }
     fclose(fp);
+    exec_progress_callback(i-mri->imnr0, mri->imnr1-mri->imnr0+1, 0, 1);
   }
 
   return(NO_ERROR);
@@ -2387,6 +2538,7 @@ static MRI *siemensRead(const char *fname, int read_volume_flag)
                       bc + i, mri->height * br + j, file);
           }
         }
+        exec_progress_callback(s, mri->depth, t, mri->nframes);
       }
     }
 
@@ -2611,6 +2763,7 @@ static MRI *mincRead(const char *fname, int read_volume)
           }
         }
       }
+      exec_progress_callback(i, mri->width, 0, 1);
     }
   }
 
@@ -3488,6 +3641,7 @@ static int mincWrite(MRI *mri, const char *fname)
              (double)MRIFseq_vox(mri, vi[di_x], vi[di_y], vi[di_z], vi[3]));
         }
       }
+      exec_progress_callback(vi[di_x], mri->width, vi[3], mri->nframes);
     }
   }
 
@@ -3707,6 +3861,7 @@ static int bvolumeWrite(MRI *vol, const char *fname_passed, int type)
     }
 
     fclose(fp);
+    exec_progress_callback(i, mri->depth, 0, 1);
   }
 
   free(bufshort);
@@ -4175,7 +4330,7 @@ static MRI *get_b_info
   MRI *mri, *mri2;
   FILE *fp;
   int nslices=0, nt;
-  int nx, ny;
+  int nx, ny,i;;
   int result;
   char fname[STRLEN];
   char extension[STRLEN];
@@ -4392,6 +4547,8 @@ static MRI *get_b_info
   mri->fov = ((mri->xend - mri->xstart) > (mri->yend - mri->ystart) ?
               (mri->xend - mri->xstart) : (mri->yend - mri->ystart));
 
+  mri->frames = (MRI_FRAME *)calloc(mri->nframes, sizeof(MRI_FRAME)) ;
+  for (i = 0 ; i < mri->nframes ; i++) mri->frames[i].m_ras2vox = NULL;
 
   if (read_volume)
   {
@@ -4510,6 +4667,7 @@ static MRI *bvolumeRead(const char *fname_passed, int read_volume, int type)
     } /* frame loop */
 
     fclose(fp);
+    exec_progress_callback(slice, mri->depth, 0, 1);
   } /* slice loop */
 
   MRIlimits(mri,&min,&max);
@@ -5562,6 +5720,8 @@ static MRI *genesisRead(const char *fname, int read_volume)
 
       if (frame != (mri->nframes-1))
         slice-- ;
+
+      exec_progress_callback(i-im_low, im_high-im_low+1, 0, 1);
     }
   }
 
@@ -5842,6 +6002,7 @@ static MRI *gelxRead(const char *fname, int read_volume)
 
       fclose(fp);
 
+      exec_progress_callback(i-im_low, im_high-im_low+1, 0, 1);
     }
 
   }
@@ -6475,6 +6636,8 @@ static MRI *analyzeRead(const char *fname, int read_volume)
         }
 
       } /* End Row Loop */
+
+      exec_progress_callback(slice, mri->depth, frame, nframes);
     }  /* End Slice Loop */
 
     /* Close file if each frame is in a separate file */
@@ -6484,13 +6647,26 @@ static MRI *analyzeRead(const char *fname, int read_volume)
 
   if (N_Zero_Pad_Input < 0) fclose(fp);
 
+  printf("  analyzeRead() roi_scale %13.9f\n",hdr->dime.roi_scale);
+  if(fabs(hdr->dime.roi_scale-1) > FLT_EPSILON && fabs(hdr->dime.roi_scale) > FLT_EPSILON){
+    // Rescale if it is neither 1 nor 0
+    if(mri->type != MRI_FLOAT){
+      MRI *mritmp;
+      printf("  analyzeRead() changing type to float\n");
+      mritmp = MRISeqchangeType(mri, MRI_FLOAT,0,0,0);
+      MRIfree(&mri);
+      mri = mritmp;
+    }
+    printf("  analyzeRead() scaling by %13.9f\n",hdr->dime.roi_scale);
+    mri = MRImultiplyConst(mri, hdr->dime.roi_scale, mri);
+  }
   free(buf);
   free(hdr);
 
-  MRIlimits(mri,&min,&max);
-  if (Gdiag_no > 0)
+  if (Gdiag_no > 0){
+    MRIlimits(mri,&min,&max);
     printf("INFO: analyzeRead(): min = %g, max = %g\n",min,max);
-
+  }
   return(mri);
 }
 
@@ -6814,6 +6990,8 @@ static int analyzeWriteFrame(MRI *mri, const char *fname, int frame)
                                     fname));
       } /* end if */
     } /* end row loop */
+    if (mri->nframes > 1)
+      exec_progress_callback(i, mri->depth, 0, 1);
   } /* end col loop */
 
   fclose(fp);
@@ -6850,6 +7028,8 @@ static int analyzeWriteSeries(MRI *mri, const char *fname)
     //printf("%3d %s\n",frame,framename);
     err = analyzeWriteFrame(mri, framename, frame);
     if (err) return(err);
+
+    exec_progress_callback(frame, mri->nframes, 0, 1);
   }
 
   return(0);
@@ -7086,6 +7266,7 @@ static int analyzeWrite4D(MRI *mri, const char *fname)
                                       "error writing to file %s", fname));
         }
       }
+      exec_progress_callback(i, mri->depth, frame, mri->nframes);
     }
   }
 
@@ -7847,6 +8028,7 @@ static MRI *gdfRead(const char *fname, int read_volume)
 
     fclose(fp);
 
+    exec_progress_callback(i-1, n_files, 0, 1);
   }
 
   if (mri->type == MRI_UCHAR)
@@ -7995,6 +8177,7 @@ static int gdfWrite(MRI *mri, const char *fname)
 
     fclose(fp);
 
+    exec_progress_callback(i, mri->depth, 0, 1);
   }
 
   free(buf);
@@ -8997,6 +9180,8 @@ MRI *MRIreadOtl
       }
       one_file_exists = TRUE;
     }
+
+    exec_progress_callback(i-1, slices, 0, 1);
   }
 
   CTABfree(&ctab);
@@ -9366,6 +9551,7 @@ static MRI *ximgRead(const char *fname, int read_volume)
 
       fclose(fp);
 
+      exec_progress_callback(i-im_low, im_high-im_low+1, 0, 1);
     }
 
   }
@@ -9549,7 +9735,9 @@ static MRI *nifti1Read(const char *fname, int read_volume)
     if (hdr.slice_code != NIFTI_SLICE_SEQ_INC &&
         hdr.slice_code != NIFTI_SLICE_SEQ_DEC &&
         hdr.slice_code != NIFTI_SLICE_ALT_INC &&
-        hdr.slice_code != NIFTI_SLICE_ALT_DEC)
+        hdr.slice_code != NIFTI_SLICE_ALT_DEC &&
+        hdr.slice_code != NIFTI_SLICE_ALT_INC2 &&
+        hdr.slice_code != NIFTI_SLICE_ALT_DEC2)
     {
       ErrorReturn(NULL,
                   (ERROR_UNSUPPORTED,
@@ -9720,6 +9908,7 @@ static MRI *nifti1Read(const char *fname, int read_volume)
 
     for (t = 0;t < mri->nframes;t++)
       for (k = 0;k < mri->depth;k++)
+      {
         for (j = 0;j < mri->height;j++)
         {
 
@@ -9746,7 +9935,8 @@ static MRI *nifti1Read(const char *fname, int read_volume)
           }
 
         }
-
+        exec_progress_callback(k, mri->depth, t, mri->nframes);
+      }
   }
   else // voxel value scaling needed
   {
@@ -9758,6 +9948,7 @@ static MRI *nifti1Read(const char *fname, int read_volume)
       buf = (unsigned char *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = fread(buf, bytes_per_voxel, mri->width, fp);
@@ -9776,6 +9967,8 @@ static MRI *nifti1Read(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -9786,6 +9979,7 @@ static MRI *nifti1Read(const char *fname, int read_volume)
       buf = (short *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = fread(buf, bytes_per_voxel, mri->width, fp);
@@ -9806,6 +10000,8 @@ static MRI *nifti1Read(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -9816,6 +10012,7 @@ static MRI *nifti1Read(const char *fname, int read_volume)
       buf = (int *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = fread(buf, bytes_per_voxel, mri->width, fp);
@@ -9836,6 +10033,8 @@ static MRI *nifti1Read(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -9846,6 +10045,7 @@ static MRI *nifti1Read(const char *fname, int read_volume)
       buf = (float *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = fread(buf, bytes_per_voxel, mri->width, fp);
@@ -9866,6 +10066,8 @@ static MRI *nifti1Read(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -9877,6 +10079,7 @@ static MRI *nifti1Read(const char *fname, int read_volume)
       buf = (double *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = fread(buf, bytes_per_voxel, mri->width, fp);
@@ -9911,6 +10114,8 @@ static MRI *nifti1Read(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -9921,6 +10126,7 @@ static MRI *nifti1Read(const char *fname, int read_volume)
       buf = (char *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = fread(buf, bytes_per_voxel, mri->width, fp);
@@ -9940,6 +10146,8 @@ static MRI *nifti1Read(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -9950,6 +10158,7 @@ static MRI *nifti1Read(const char *fname, int read_volume)
       buf = (unsigned short *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = fread(buf, bytes_per_voxel, mri->width, fp);
@@ -9971,6 +10180,8 @@ static MRI *nifti1Read(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -9981,6 +10192,7 @@ static MRI *nifti1Read(const char *fname, int read_volume)
       buf = (unsigned int *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = fread(buf, bytes_per_voxel, mri->width, fp);
@@ -10002,6 +10214,8 @@ static MRI *nifti1Read(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -10198,6 +10412,7 @@ static int nifti1Write(MRI *mri0, const char *fname)
 
   for (t = 0;t < mri->nframes;t++)
     for (k = 0;k < mri->depth;k++)
+    {
       for (j = 0;j < mri->height;j++)
       {
         buf = &MRIseq_vox(mri, 0, j, k, t);
@@ -10211,6 +10426,8 @@ static int nifti1Write(MRI *mri0, const char *fname)
             "nifti1Write(): error writing data to %s", img_fname));
         }
       }
+      exec_progress_callback(k, mri->depth, t, mri->nframes);
+    }
 
   fclose(fp);
   if(FreeMRI) MRIfree(&mri);
@@ -10338,7 +10555,9 @@ static MRI *niiRead(const char *fname, int read_volume)
     if (hdr.slice_code != NIFTI_SLICE_SEQ_INC &&
         hdr.slice_code != NIFTI_SLICE_SEQ_DEC &&
         hdr.slice_code != NIFTI_SLICE_ALT_INC &&
-        hdr.slice_code != NIFTI_SLICE_ALT_DEC)
+        hdr.slice_code != NIFTI_SLICE_ALT_DEC &&
+        hdr.slice_code != NIFTI_SLICE_ALT_INC2 &&
+        hdr.slice_code != NIFTI_SLICE_ALT_DEC2)
     {
       ErrorReturn(NULL,
                   (ERROR_UNSUPPORTED,
@@ -10573,6 +10792,7 @@ static MRI *niiRead(const char *fname, int read_volume)
 	  }
 
         }
+        exec_progress_callback(k, mri->depth, t, mri->nframes);
       }
     }
     free(fbuf);
@@ -10588,6 +10808,7 @@ static MRI *niiRead(const char *fname, int read_volume)
       buf = (unsigned char *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = znzread(buf, bytes_per_voxel, mri->width, fp);
@@ -10605,6 +10826,8 @@ static MRI *niiRead(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -10615,6 +10838,7 @@ static MRI *niiRead(const char *fname, int read_volume)
       buf = (short *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = znzread(buf, bytes_per_voxel, mri->width, fp);
@@ -10634,6 +10858,8 @@ static MRI *niiRead(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -10644,6 +10870,7 @@ static MRI *niiRead(const char *fname, int read_volume)
       buf = (int *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = znzread(buf, bytes_per_voxel, mri->width, fp);
@@ -10663,6 +10890,8 @@ static MRI *niiRead(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -10673,6 +10902,7 @@ static MRI *niiRead(const char *fname, int read_volume)
       buf = (float *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = znzread(buf, bytes_per_voxel, mri->width, fp);
@@ -10692,6 +10922,8 @@ static MRI *niiRead(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -10703,6 +10935,7 @@ static MRI *niiRead(const char *fname, int read_volume)
       buf = (double *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = znzread(buf, bytes_per_voxel, mri->width, fp);
@@ -10736,6 +10969,8 @@ static MRI *niiRead(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -10746,6 +10981,7 @@ static MRI *niiRead(const char *fname, int read_volume)
       buf = (char *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = znzread(buf, bytes_per_voxel, mri->width, fp);
@@ -10763,6 +10999,8 @@ static MRI *niiRead(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -10773,6 +11011,7 @@ static MRI *niiRead(const char *fname, int read_volume)
       buf = (unsigned short *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = znzread(buf, bytes_per_voxel, mri->width, fp);
@@ -10792,6 +11031,8 @@ static MRI *niiRead(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
 
@@ -10802,6 +11043,7 @@ static MRI *niiRead(const char *fname, int read_volume)
       buf = (unsigned int *)malloc(mri->width * bytes_per_voxel);
       for (t = 0;t < mri->nframes;t++)
         for (k = 0;k < mri->depth;k++)
+        {
           for (j = 0;j < mri->height;j++)
           {
             n_read = znzread(buf, bytes_per_voxel, mri->width, fp);
@@ -10821,6 +11063,8 @@ static MRI *niiRead(const char *fname, int read_volume)
               MRIFseq_vox(mri, i, j, k, t) =
                 hdr.scl_slope * (float)(buf[i]) + hdr.scl_inter;
           }
+          exec_progress_callback(k, mri->depth, t, mri->nframes);
+        }
       free(buf);
     }
   }
@@ -10828,7 +11072,7 @@ static MRI *niiRead(const char *fname, int read_volume)
 
   // Check for ico7 surface
   if(IsIco7){
-    //printf("niiRead: reshaping\n");
+ //   printf("niiRead: reshaping\n");
     mritmp = mri_reshape(mri,163842,1,1,mri->nframes);
     MRIfree(&mri);
     mri = mritmp;
@@ -11030,6 +11274,7 @@ static int niiWrite(MRI *mri0, const char *fname)
   // Now dump the pixel data
   for (t = 0;t < mri->nframes;t++)
     for (k = 0;k < mri->depth;k++)
+    {
       for (j = 0;j < mri->height;j++)
       {
 	//printf("%d,%d,%d\n",t, k, j); 
@@ -11043,6 +11288,8 @@ static int niiWrite(MRI *mri0, const char *fname)
                        "niiWrite(): error writing data to %s", fname));
         }
       }
+      exec_progress_callback(k, mri->depth, t, mri->nframes);
+    }
 
   znzclose(fp);
 
@@ -11509,6 +11756,8 @@ MRI *MRIreadGeRoi(const char *fname, int n_slices)
       read_one_flag = TRUE;
 
     }
+
+    exec_progress_callback(0, n_slices, 0, 1);
   }
 
   if (!read_one_flag)
@@ -11816,6 +12065,8 @@ MRI *MRIreadRaw(FILE *fp, int width, int height, int depth, int type)
         ((short *)buf)[i] = orderShortBytes(((short *)buf)[i]);
       short_local_buffer_to_image((short *)buf, mri, slice, 0);
     }
+
+    exec_progress_callback(slice, depth, 0, 1);
   }
 
   MRIinitHeader(mri) ;
@@ -12061,9 +12312,38 @@ znzTAGwriteMRIframes(znzFile fp, MRI *mri)
     {
       MATRIX *m = MatrixAlloc(4, 4, MATRIX_REAL) ;
       znzWriteMatrix(fp, m) ;
+      MatrixFree(&m);
     }
     znzwriteFloat(frame->thresh, fp) ;
     znzwriteInt(frame->units, fp) ;
+    if (frame->type == FRAME_TYPE_DIFFUSION_AUGMENTED)   // also store diffusion info
+    {
+      znzwriteDouble(frame->DX, fp) ;
+      znzwriteDouble(frame->DY, fp) ;
+      znzwriteDouble(frame->DZ, fp) ;
+
+      znzwriteDouble(frame->DR, fp) ;
+      znzwriteDouble(frame->DP, fp) ;
+      znzwriteDouble(frame->DS, fp) ;
+      znzwriteDouble(frame->bvalue, fp) ;
+      znzwriteDouble(frame->TM, fp) ;
+
+      znzwriteLong(frame->D1_ramp, fp) ;
+      znzwriteLong(frame->D1_flat, fp) ;
+      znzwriteDouble(frame->D1_amp, fp) ;
+
+      znzwriteLong(frame->D2_ramp, fp) ;
+      znzwriteLong(frame->D2_flat, fp) ;
+      znzwriteDouble(frame->D2_amp, fp) ;
+
+      znzwriteLong(frame->D3_ramp, fp) ;
+      znzwriteLong(frame->D3_flat, fp) ;
+      znzwriteDouble(frame->D3_amp, fp) ;
+
+      znzwriteLong(frame->D4_ramp, fp) ;
+      znzwriteLong(frame->D4_flat, fp) ;
+      znzwriteDouble(frame->D4_amp, fp) ;
+    }
   }
   fend = znztell(fp) ;
   len -= (fend - here) ;   // unused space
@@ -12112,6 +12392,34 @@ znzTAGreadMRIframes(znzFile fp, MRI *mri, long len)
 
     frame->thresh = znzreadFloat(fp) ;
     frame->units = znzreadInt(fp) ;
+    if (frame->type == FRAME_TYPE_DIFFUSION_AUGMENTED)
+    {
+      frame->DX = znzreadDouble(fp) ;
+      frame->DY = znzreadDouble(fp) ;
+      frame->DZ = znzreadDouble(fp) ;
+
+      frame->DR = znzreadDouble(fp) ;
+      frame->DP = znzreadDouble(fp) ;
+      frame->DS = znzreadDouble(fp) ;
+      frame->bvalue = znzreadDouble(fp) ;
+      frame->TM = znzreadDouble(fp) ;
+
+      frame->D1_ramp = znzreadLong(fp) ;
+      frame->D1_flat = znzreadLong(fp) ;
+      frame->D1_amp = znzreadDouble(fp) ;
+
+      frame->D2_ramp = znzreadLong(fp) ;
+      frame->D2_flat = znzreadLong(fp) ;
+      frame->D2_amp = znzreadDouble(fp) ;
+
+      frame->D3_ramp = znzreadLong(fp) ;
+      frame->D3_flat = znzreadLong(fp) ;
+      frame->D3_amp = znzreadDouble(fp) ;
+
+      frame->D4_ramp = znzreadLong(fp) ;
+      frame->D4_flat = znzreadLong(fp) ;
+      frame->D4_amp = znzreadDouble(fp) ;
+    }
   }
 
   fend = znztell(fp) ;
@@ -12263,9 +12571,13 @@ mghRead(const char *fname, int read_volume, int frame)
     mri->nframes = nframes ;
     if (gzipped)
     { // pipe cannot seek
-      long count;
-      for (count=0; count < (long)mri->nframes*width*height*depth*bpv; count++)
-        znzgetc(fp);
+      long count, total_bytes;
+      uchar buf[STRLEN] ;
+
+      total_bytes = (long)mri->nframes*width*height*depth*bpv ;
+      for (count=0; count < total_bytes-STRLEN; count += STRLEN)
+        znzread(buf, STRLEN, 1, fp);
+      znzread(buf, total_bytes-count, 1, fp) ;
     }
     else
       znzseek(fp, (long)mri->nframes*width*height*depth*bpv, SEEK_CUR) ;
@@ -12359,6 +12671,7 @@ mghRead(const char *fname, int read_volume, int frame)
                        mri->type)) ;
           break ;
         }
+        exec_progress_callback(z, depth, frame-start_frame, end_frame-start_frame+1);
       }
     }
     if (buf) free(buf) ;
@@ -12498,7 +12811,7 @@ mghRead(const char *fname, int read_volume, int frame)
         break ;
 
       case TAG_CMDLINE:
-        if (mri->ncmds > MAX_CMDS)
+        if (mri->ncmds >= MAX_CMDS)
           ErrorExit(ERROR_NOMEMORY,
                     "mghRead(%s): too many commands (%d) in file",
                     fname,mri->ncmds);
@@ -12705,6 +13018,7 @@ mghWrite(MRI *mri, const char *fname, int frame)
           break ;
         }
       }
+      exec_progress_callback(z, depth, frame-start_frame, end_frame-start_frame+1);
     }
   }
 
@@ -12814,7 +13128,9 @@ MRI *MRIreorder4(MRI *mri, int order[4])
 	  MRIsetVoxVal(new,c1,r1,s1,f1, v);
 	}
       }
+
     }
+    exec_progress_callback(c0, mri->width, 0, 1);
   }
 
   return(new);
@@ -13052,6 +13368,8 @@ MRI *MRIreorder(MRI *mri_src, MRI *mri_dst, int xdim, int ydim, int zdim)
           }
         }
       }
+
+      exec_progress_callback(zs, depth, f, mri_src->nframes);
     }
   }/* end loop over frames */
   return(mri_dst) ;
@@ -14790,6 +15108,7 @@ MRI *MRIremoveNaNs(MRI *mri_src, MRI *mri_dst)
 	}
       }
     }
+    exec_progress_callback(x, mri_dst->width, 0, 1);
   }
   if(nans > 0)
     ErrorPrintf

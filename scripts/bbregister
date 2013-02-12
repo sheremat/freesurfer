@@ -6,8 +6,8 @@
 # Original Author: Doug Greve
 # CVS Revision Info:
 #    $Author: greve $
-#    $Date: 2011/10/07 19:17:55 $
-#    $Revision: 1.49.2.1 $
+#    $Date: 2012/07/18 15:29:02 $
+#    $Revision: 1.55 $
 #
 # Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
 #
@@ -22,7 +22,7 @@
 #
 
 #
-set VERSION = '$Id: bbregister,v 1.49.2.1 2011/10/07 19:17:55 greve Exp $';
+set VERSION = '$Id: bbregister,v 1.55 2012/07/18 15:29:02 greve Exp $';
 set inputargs = ($argv);
 
 set subject = ();
@@ -32,8 +32,10 @@ set frame = ();
 set midframe = 0;
 set outreg = ();
 set outfsl = ();
+set outlta = ();
 set InitFSL = 0;
 set InitSPM = 0;
+set InitRR = 0;
 set SPMUseNII = 0;
 set InitHeader = 0;
 set InitReg = ();
@@ -59,6 +61,7 @@ set nPowellMax = 36;
 set DOF = 6;
 set FSLDOF = 6;
 set FSLSwapTrans = 0;
+set FSLBETMov = 0;
 set DoPass1 = 1;
 
 set WMProjAbs = 2;
@@ -148,8 +151,10 @@ if($#InitReg == 0) then
   endif
   if($InitFSL) then
     set cmd = (fslregister --s $subject --mov $regvol --reg $InitReg \
-      --niters 1 --maxangle 90 --nobetmov --tmp $tmpdir/fslregister \
+      --niters 1 --maxangle 90 --tmp $tmpdir/fslregister \
       --dof $FSLDOF --fsvol $fsvol)
+    if($FSLBETMov)   set cmd = ($cmd --betmov)
+    if(! $FSLBETMov) set cmd = ($cmd --nobetmov)
     if($FSLSwapTrans) set cmd = ($cmd --allow-swap --trans)
     if($nolog) set cmd = ($cmd --nolog)
     echo $cmd | tee -a $LF
@@ -161,6 +166,19 @@ if($#InitReg == 0) then
       --tmp $tmpdir/spmregister)
     if($nolog) set cmd = ($cmd --nolog)
     if($SPMUseNII) set cmd = ($cmd --nii)
+    echo $cmd | tee -a $LF
+    $cmd |& tee -a $LF
+    if($status) exit 1;
+  endif
+  if($InitRR) then
+    set rrlta = $tmpdir/rr.lta
+    set cmd = (mri_robust_register --mov $regvol \
+     --dst $SUBJECTS_DIR/$subject/mri/$fsvol.mgz \
+     --lta $rrlta --cost NMI --nosym);
+    echo $cmd | tee -a $LF
+    $cmd |& tee -a $LF
+    if($status) exit 1;
+    set cmd = (tkregister2_cmdl --mov $regvol --s $subject --lta $rrlta --reg $InitReg)
     echo $cmd | tee -a $LF
     $cmd |& tee -a $LF
     if($status) exit 1;
@@ -276,6 +294,14 @@ if($#outfsl) then
   if($status) exit 1;
 endif
 
+if($#outlta) then
+  set cmd = (tkregister2_cmdl --mov $movvol --reg $outreg \
+    --noedit --ltaout $outlta);
+  echo $cmd | tee -a $LF
+  $cmd | tee -a $LF
+  if($status) exit 1;
+endif
+
 if($#featdir) then
   cp $outreg $featdir/reg/freesurfer/register.dat
   set reg152 = $featdir/reg/freesurfer/anat2std.register.dat
@@ -332,6 +358,7 @@ while( $#argv != 0 )
       goto usage_exit;
       breaksw
 
+    case "--subject":
     case "--s":
       if ( $#argv < 1) goto arg1err;
       set subject = $argv[1]; shift;
@@ -406,9 +433,23 @@ while( $#argv != 0 )
       set outfsl = $argv[1]; shift;
       breaksw
 
+    case "--lta":
+      if ( $#argv < 1) goto arg1err;
+      set outlta = $argv[1]; shift;
+      breaksw
+
+    case "--init-rr":
+      set InitFSL = 0;
+      set InitSPM = 0;
+      set InitRR = 1;
+      set InitHeader = 0;
+      set InitReg = ();
+      breaksw
+ 
     case "--init-fsl":
       set InitFSL = 1;
       set InitSPM = 0;
+      set InitRR = 0;
       set InitHeader = 0;
       set InitReg = ();
       breaksw
@@ -420,6 +461,7 @@ while( $#argv != 0 )
     case "--init-spm":
       set InitFSL = 0;
       set InitSPM = 1;
+      set InitRR = 0;
       set InitHeader = 0;
       set InitReg = ();
       breaksw
@@ -642,6 +684,13 @@ while( $#argv != 0 )
       set FSLDOF = $argv[1]; shift;
       breaksw
 
+    case "--fsl-bet-mov":
+      set FSLBETMov = 1;
+      breaksw
+    case "--no-fsl-bet-mov":
+      set FSLBETMov = 0;
+      breaksw
+
     case "--rms":
       if($#argv < 1) goto arg1err;
       set RMSFile = $argv[1]; shift;
@@ -745,8 +794,12 @@ check_params:
   endif
 
   if($#outreg == 0) then
-    echo "ERROR: must spec an output reg file"
-    exit 1;
+    if ($#outlta == 0) then
+      echo "ERROR: must spec an output reg file (using either --reg or --lta)"
+      exit 1;
+    else
+      set outreg = ${outlta:r}.dat
+    endif
   endif
 
   if($#frame && $midframe) then
@@ -754,7 +807,7 @@ check_params:
     exit 1;
   endif
 
-  if(! $InitFSL && ! $InitSPM && ! $InitHeader && ! $#InitReg) then
+  if(! $InitFSL && ! $InitSPM && ! $InitRR && ! $InitHeader && ! $#InitReg) then
     echo "ERROR: must spec an init method"
     exit 1;
   endif

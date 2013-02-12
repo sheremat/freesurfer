@@ -9,8 +9,8 @@
 # Original Author: Martin Reuter
 # CVS Revision Info:
 #    $Author: mreuter $
-#    $Date: 2011/05/10 21:17:29 $
-#    $Revision: 1.1.2.5 $
+#    $Date: 2011/05/10 20:37:18 $
+#    $Revision: 1.6 $
 #
 # Copyright © 2011 The General Hospital Corporation (Boston, MA) "MGH"
 #
@@ -126,7 +126,7 @@ def options_parse():
     Command Line Options Parser for asegstats2table
     initiate the option parser and return the parsed object
     """
-    parser = optparse.OptionParser(version='$Id: merge_stats_tables,v 1.1.2.5 2011/05/10 21:17:29 mreuter Exp $', usage=HELPTEXT)
+    parser = optparse.OptionParser(version='$Id: merge_stats_tables,v 1.6 2011/05/10 20:37:18 mreuter Exp $', usage=HELPTEXT)
     
     # help text
     h_sub = '(REQUIRED) subject1 <subject2 subject3..>'
